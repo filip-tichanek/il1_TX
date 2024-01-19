@@ -2311,7 +2311,7 @@ summary(model_il1a_value_adjCRE)
 ```
 
 
-### IL-1a
+### IL-1RA
 ```{r}
 model_data <- data_long %>% 
   filter(!is.na(il1_ra_value))
@@ -2367,7 +2367,7 @@ data_long <- data_long %>%
 ```
 
 
-Now we can construct plots showing the relationship between IL-18BP levels and levels of IL-18 (free and total). We will show it with focus on healthy individuals, and for 1st measurement of the group without rejection where the IL-18BP and IL-18 were most variable, with examples of minimal as well as vy high bounding
+Now, we can create plots to demonstrate the relationship between IL-18BP levels and IL-18 levels (both free and total). We will concentrate on healthy individuals and the initial measurement from the group without rejection, noted for its significant variability in IL-18BP and IL-18 levels. The plots will display examples showcasing both minimal and very high IL-18 binding.
 
 ```{r, fig.height=6, fig.width=7}
 ## prepare data
