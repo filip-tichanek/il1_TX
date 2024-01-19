@@ -1,0 +1,2457 @@
+---
+title: "Changes in the serum levels of IL-1 family cytokines after kidney allograft transplantation"
+subtitle: "Statistical report - data exploration and statistical analysis"
+author: "Cecrdlova et al."
+format: 
+  html:  
+    embed-resources: true
+    keep-md: false
+    toc: true
+    toc-expand: 2
+    toc-depth: 4
+    toc-location: left
+    number-sections: true
+    number-depth: 4
+    code-fold: show
+    code-tools: true
+    code-summary: "Open code"
+    grid: 
+      body-width: 1000px
+      sidebar-width: 600px
+      margin-width: 100px
+editor: source
+project:
+  type: default
+  output-dir: output
+theme: darkly
+highlight-style: github-dark
+fontsize: 12 px
+code-block-bg: "#2D2D31"
+fontcolor: "#F5F5F5"
+monobackgroundcolor: "#3B3B3B"
+---
+
+------------------------------------------------------------------------
+```{r, collapse=TRUE, echo=FALSE, output=FALSE}
+getwd()
+```
+
+```{r setup, echo=FALSE}
+knitr::opts_chunk$set(collapse = TRUE)
+```
+
+
+```{css, echo=FALSE}
+code.sourceCode {
+  font-size: 0.85em;
+  border: 1px solid #ffffff; /* White border */
+  padding: 20px; /* Add padding for better visibility */
+}
+
+code{
+    color: #EEE8AA; /* Change the color value as needed */
+}
+
+.equation {
+  text-align: center;
+  display: block;
+  margin: auto;
+}
+
+body {
+  text-align: justify;
+}
+
+```
+
+------------------------------------------------------------------------
+
+
+**Authors' affiliations**: 
+
+<span style="font-size: larger;">Cecrdlova E^1^, Krupickova L^1^, Fialova M^1^, Novotny M^2^, Svachova V^1^, Mezerova K^1^, Viklicky O^2^, Tichanek ^3^, Striz I^1^ </span>
+
+
+^1^Department of Clinical and Transplant Immunology
+
+^2^Department of Nephrology
+
+^3^Department of Data Science
+
+Institute for Clinical and Experimental Medicine, Prague, Czech Republic
+ 
+<br>
+
+The paper is *under review* at the [*Cytokine*](https://www.sciencedirect.com/journal/cytokine) journal 
+
+
+------------------------------------------------------------------------
+
+
+
+# Packages and functions
+
+```{r, collapse=TRUE}
+if (T) {rm(list = ls() )}
+if (T) { 
+  suppressWarnings(suppressMessages({
+    library(tidyverse)
+    library(stringr)
+    library(ggpubr)
+    library(emmeans)
+    library(gtsummary)
+    library(car)
+    library(sjPlot)
+    library(flextable)
+    library(openxlsx)
+    library(mgcv)
+    library(pROC)
+    library(cowplot)
+    library(boot)
+    library(glmnet)
+    library(brms)
+    library(projpred)
+    library(RJDBC)
+    library(janitor)
+    library(arm)
+    library(corrplot)
+    library(lubridate)
+    library(kableExtra)    
+    library(ggdist)
+    library(bayesplot)
+    library(coxed)
+    library(quantreg)
+    library(rstudioapi)
+    library(effects)
+    library(lqmm)
+    
+    # Functions clashes
+    select <- dplyr::select
+    rename <- dplyr::rename
+    mutate <- dplyr::mutate
+    recode <- dplyr::recode
+    summarize <- dplyr::summarize
+    count <- dplyr::count
+    
+    # Simple math functions
+    logit <-function(x){log(x/(1-x))}
+    inv.logit <- function(x){exp(x)/(1+exp(x))}
+  }))
+}
+```
+
+
+
+## `run_model` function
+
+The function to (i) load OR (ii) run & save (if has not been done previously) results of any computation or complex table production
+
+```{r, collapse=TRUE}
+run <- function(expr, path, reuse = TRUE) {
+  # Initialize 'fit' to NULL to ensure it's always defined
+  fit <- NULL
+
+  # Construct the file path only if 'reuse' is TRUE
+  if (reuse) {
+    path <- paste0(path, ".Rds")
+    fit <- suppressWarnings(try(readRDS(path), silent = TRUE))
+
+    # Check if 'fit' is an error (file not found or couldn't be read)
+    if (inherits(fit, "try-error")) {
+      fit <- NULL
+    }
+  }
+
+  # If 'fit' is NULL (either because 'reuse' is FALSE, or the file couldn't be read), evaluate 'expr'
+  if (is.null(fit)) {
+    fit <- eval(substitute(expr))
+
+    # Save 'fit' only if 'reuse' is TRUE and a valid 'path' is provided
+    if (reuse && !is.null(path) && nzchar(path)) {
+      saveRDS(fit, file = path)
+    }
+  }
+  return(fit)
+}
+```
+
+
+
+## Data upload
+
+```{r}
+patient_table <- read.table('data/pat_data.txt')
+patient_table <- patient_table %>% select(-c(Patient, date_of_rejection,
+                                             bid, Dg))
+summary(patient_table)
+
+data_long <- read.table('data/long_data.txt')
+data_long <- data_long%>% select(-Patient)
+summary(data_long)
+```
+
+
+# Summary statistics 
+
+Summary table for all relevant variables
+
+## Healthy included
+
+```{r, collapse=TRUE, warning=FALSE, message=FALSE}
+sumtab1 <- run(
+ patient_table %>% select(-id, -rejection_afterTX) %>% 
+  tbl_summary( by='group',
+               type = list(hemodialysis_years ~ 'continuous',
+                           N_mismatch ~ 'continuous')
+               ) %>%
+  modify_caption('Subjects characteristics according to group (healthy vs. with acute rejection vs. no acute rejection') %>% 
+   add_p(),
+ path = 'gitignore/run/sumtab1', reuse=TRUE)
+
+sumtab1
+```
+
+## TX patients only
+```{r, collapse=TRUE, warning=FALSE, message=FALSE}
+sumtab2 <- run(
+ patient_table %>% select(-id, -rejection_afterTX) %>% 
+   filter(group != 'healthy') %>% 
+   mutate(group = factor(group)) %>% 
+  tbl_summary( by='group',
+               type = list(hemodialysis_years ~ 'continuous',
+                           N_mismatch ~ 'continuous')
+               ) %>%
+  modify_caption('Patient characteristics according to developed acute rejection') %>% 
+   add_p(),
+ path = 'gitignore/run/sumtab2', reuse=TRUE)
+
+sumtab2
+```
+
+## Summary table for continuous variables
+
+```{r, collapse=TRUE}
+sumtab <- patient_table %>%
+  select(
+    receiver_age, donor_age,
+    N_mismatch, PRA_max, PRA_actual, CIT_hours, MT_minutes,
+    hemodialysis_years, group, il1_a_mean, il1_b_mean, il1_ra_mean,
+    il18_mean, il18_bp_mean, il18_free_mean, il36_b_mean) %>% 
+  group_by(group) %>%
+  summarize(across(where(is.numeric), 
+                   list(median = ~median(., na.rm = TRUE), 
+                        mean = ~mean(., na.rm = TRUE), 
+                        IQR = ~IQR(., na.rm = TRUE), 
+                        Q25 = ~quantile(., 0.25, na.rm = TRUE), 
+                        Q75 = ~quantile(., 0.75, na.rm = TRUE),
+                        sd = ~sd(., na.rm = TRUE)), 
+                   .names = "{.col}_{.fn}")) 
+kableExtra::kable(t(sumtab)) 
+```
+
+
+# Cytokine levels changes over time and across groups
+
+Creating a new variable, `group_sep`, that combines `group` and `time_point` into a single variable. Re-defining `group` and `time_point` to be factors
+```{r}
+data_long <- data_long %>% 
+  mutate(group_sep = factor(interaction(group, time_point)),
+         group = factor(group, levels = 
+                          c("healthy",
+                            "no_rejection", 
+                            "acute_rejection")),
+         time_point = factor(time_point))
+```
+
+## Il1_a
+
+### Mixed model
+```{r, collapse=TRUE}
+
+## filtering data
+model_data <- data_long %>% 
+  filter(!is.na(il1_a_value))
+
+## model fit
+model_il1_a <-  lmer(log10(il1_a_value) ~ 
+                       group_sep +
+                       (1|id), data = model_data)
+
+## diagnostic plot of model
+plot(model_il1_a)
+
+## anova result od model
+Anova(model_il1_a, type=2, test.statistic='F')
+
+## model summary
+summary(model_il1_a)
+```
+
+
+### Pairwise comparison
+
+
+
+#### List of contrasts
+
+List of contrast names and left and right coordinates on the X axis
+
+```{r}
+contrast <- c(
+
+  ## healthy vs. others
+  "healthy vs. no rejection D_0",
+  "healthy vs. no rejection D_7",
+  "healthy vs. no rejection D_90",
+  "healthy vs. no rejection D_365",
+  "healthy vs. acute rejection D_0",
+  "healthy vs. acute rejection D_7",
+  "healthy vs. acute rejection D_90",
+  "healthy vs. acute rejection D_365",
+  "healthy vs. acute rejection D_biopsy",
+
+
+  ## between-subjects comparisons
+  "no rejection D_0 vs. acute rejection D_0",
+  "no rejection D_7 vs. acute rejection D_7",
+  "no rejection D_90 vs. acute rejection D_90",
+  "no rejection D_365 vs. acute rejection D_365",
+  "no rejection D_0 vs. acute rejection D_biopsy",
+  "no rejection D_7 vs. acute rejection D_biopsy",
+  "no rejection D_90 vs. acute rejection D_biopsy",
+  "no rejection D_365 vs. acute rejection D_biopsy",
+
+  ## within-subjects comparisons
+  ### no rejection
+  "no rejection D_0 vs. no rejection D_7",
+  "no rejection D_0 vs. no rejection D_90",
+  "no rejection D_0 vs. no rejection D_365",
+  "no rejection D_7 vs. no rejection D_90",
+  "no rejection D_7 vs. no rejection D_365",
+  "no rejection D_90 vs. no rejection D_365",
+
+    ### acute rejection
+  "acute rejection D_0 vs. acute rejection D_7",
+  "acute rejection D_0 vs. acute rejection D_90",
+  "acute rejection D_0 vs. acute rejection D_365",
+  "acute rejection D_7 vs. acute rejection D_90",
+  "acute rejection D_7 vs. acute rejection D_365",
+  "acute rejection D_90 vs. acute rejection D_365",
+  "acute rejection D_0 vs. acute rejection D_biopsy",
+  "acute rejection D_7 vs. acute rejection D_biopsy",
+  "acute rejection D_90 vs. acute rejection D_biopsy",
+  "acute rejection D_365 vs. acute rejection D_biopsy"
+  )
+xcoord_1 <- c(rep(6, 9), seq(0.8, 3.8, 1), seq(0.8, 3.8, 1),
+              rep(0.8, 3), rep(1.8, 2), 2.8,
+              rep(1.2, 3), rep(2.2, 2), 3.2,
+              seq(1.2, 4.2, 1))
+
+xcoord_2 <- c(seq(0.8, 3.8, 1), seq(1.2, 4.2, 1),
+              5, seq(1.2, 4.2, 1), rep(5, 4),
+              seq(1.8, 3.8, 1), 2.8, 3.8, 3.8,
+              2.2, 3.2, 4.2, 3.2, 4.2, 4.2,
+              rep(5, 4))
+
+anot_coord <- (xcoord_1+xcoord_2)/2
+
+pair_table <- data.frame(contrast, xcoord_1, xcoord_2,
+                         anot_coord)
+
+pair_table <- pair_table %>% 
+  mutate(term1 = if_else(xcoord_1 == 6, 'healthy.000', 'other')) %>% 
+  mutate(term1 = if_else(xcoord_1 == 0.8, 'no_rejection.000', term1)) %>% 
+  mutate(term1 = if_else(xcoord_1 == 1.8, 'no_rejection.007', term1)) %>% 
+  mutate(term1 = if_else(xcoord_1 == 2.8, 'no_rejection.090', term1)) %>% 
+  mutate(term1 = if_else(xcoord_1 == 3.8, 'no_rejection.365', term1)) %>% 
+  mutate(term1 = if_else(xcoord_1 == 5, 'acute_rejection.biopsy', term1)) %>% 
+  mutate(term1 = if_else(xcoord_1 == 1.2, 'acute_rejection.000', term1)) %>% 
+  mutate(term1 = if_else(xcoord_1 == 2.2, 'acute_rejection.007', term1)) %>%
+  mutate(term1 = if_else(xcoord_1 == 3.2, 'acute_rejection.090', term1)) %>%
+  mutate(term1 = if_else(xcoord_1 == 4.2, 'acute_rejection.365', term1)) %>%
+  mutate(term2 = if_else(xcoord_2 == 6, 'healthy.000', 'other')) %>% 
+  mutate(term2 = if_else(xcoord_2 == 0.8, 'no_rejection.000', term2)) %>% 
+  mutate(term2 = if_else(xcoord_2 == 1.8, 'no_rejection.007', term2)) %>% 
+  mutate(term2 = if_else(xcoord_2 == 2.8, 'no_rejection.090', term2)) %>% 
+  mutate(term2 = if_else(xcoord_2 == 3.8, 'no_rejection.365', term2)) %>% 
+  mutate(term2 = if_else(xcoord_2 == 5, 'acute_rejection.biopsy', term2)) %>% 
+  mutate(term2 = if_else(xcoord_2 == 1.2, 'acute_rejection.000', term2)) %>% 
+  mutate(term2 = if_else(xcoord_2 == 2.2, 'acute_rejection.007', term2)) %>%
+  mutate(term2 = if_else(xcoord_2 == 3.2, 'acute_rejection.090', term2)) %>%
+  mutate(term2 = if_else(xcoord_2 == 4.2, 'acute_rejection.365', term2))
+
+  
+  pair_table$p <- NA
+```
+
+
+#### Between-subjects comparisons
+
+```{r, warning=FALSE}
+set.seed(16)
+for (i in 1:17){
+  dat_pair <- model_data %>% 
+    filter(group_sep == paste(pair_table$term1[i])|
+           group_sep == paste(pair_table$term2[i]))
+  
+  g1 <- dat_pair %>% filter(group_sep == paste(pair_table$term1[i]))
+  g2 <- dat_pair %>% filter(group_sep == paste(pair_table$term2[i]))
+  
+  pair_table$p[i] <- wilcox.test(g1$il1_a_value, g2$il1_a_value, paired=FALSE)$p.value
+}
+
+
+```
+
+
+#### Within-subject comparisons
+```{r, warning=FALSE}
+set.seed(16)
+for (i in 18:33){
+  dat_pair <- model_data %>% 
+    filter(group_sep == paste(pair_table$term1[i]) |
+           group_sep == paste(pair_table$term2[i])) %>% 
+    select(id, group_sep, il1_a_value) %>% 
+    pivot_wider(names_from = group_sep, values_from = il1_a_value) %>% 
+    filter(complete.cases(.)) %>% data.frame()
+  
+  g1 <- dat_pair[,2]
+  g2 <- dat_pair[,3]
+  
+  pair_table$p[i] <- wilcox.test(c(g1), c(g2), paired=TRUE)$p.value
+}
+
+pair_table <- pair_table[-c(14:15, 19:20, 22, 25:26, 28, 30:33),] %>% data.frame()
+pair_table$cole <- c(rep("black", 15), rep("blue3", 3), rep("red4", 3))
+pair_table$fdr <- p.adjust(pair_table$p, method = 'BH')
+```
+
+
+#### Resulting table
+```{r}
+## the whole `pair table`
+pair_table
+
+## only significant differences
+pair_table %>% 
+  filter(p<0.05) %>% 
+  select(contrast, p, fdr) %>% 
+  mutate(star = if_else(p<0.05, '*', '')) %>% 
+  mutate(star = if_else(p<0.01, '**', star)) %>% 
+  mutate(star = if_else(p<0.001, '***', star)) %>%        
+  data.frame()
+
+
+pair_rest <- pair_table %>% 
+  filter(p<0.05,
+         term1 != 'healthy.000') %>% 
+  mutate(star = if_else(p<0.05, '*', '')) %>% 
+  mutate(star = if_else(p<0.01, '**', star)) %>% 
+  mutate(star = if_else(p<0.001, '***', star)) %>%        
+  data.frame()
+```
+
+### Visualization
+```{r, warning=FALSE, fig.height=5.6, fig.width=7.5}
+
+## plot
+plotos <- data_long %>% 
+  filter(!is.na(il1_a_value)) %>% 
+  mutate(group = factor(group, levels = 
+                          c("no_rejection", 
+                            "acute_rejection",
+                            "healthy")),
+         time_point = factor(time_point)) %>% 
+  mutate(time_point = if_else(group == 'healthy', 'healthy', time_point)) %>% 
+  mutate(group_sep = interaction(group, time_point)) %>% 
+  
+## plotting
+  ggplot(aes(x=time_point, y=il1_a_value)) +
+  geom_boxplot(aes(fill=group, group = group_sep), outlier.shape = NA, 
+               size=0.5,position = position_dodge(width = 0.84), color='black') +
+  labs(x = "Time post TX", y = expression("IL-1" * alpha * " (pg/ml)")) +
+  scale_x_discrete(labels = c("Before TX", "7 days", "3 months", "365 days",
+                              "Biopsy", "Healthy")) +
+  theme(axis.text = element_text(size = 11),
+        axis.title = element_text(size = 12),
+        legend.text = element_text(size = 11),
+        legend.title = element_text(size = 12)) +
+  scale_fill_manual(values = c("no_rejection" = "skyblue2",
+                               "acute_rejection" = "coral",
+                               "healthy" = "darkolivegreen3"), 
+                    labels = c("no rejection", "acute rejection", "healthy")) +
+    coord_cartesian(ylim = c(0, 30)) +
+  annotate("text", x = 6, y = 5, label = "#", size = 7) 
+
+pair_rest$y <- c(12, 11, 16, 13,30)
+
+plotos <- plotos + geom_segment(data = pair_rest, 
+                                aes(x = xcoord_1, xend = xcoord_2, y = y, yend = y),
+                                color = pair_rest$cole,
+                                linetype = "solid", size = 0.4) 
+plot_il1_a <- plotos + annotate("text", x = pair_rest$anot_coord, y = pair_rest$y+0.5, 
+                            label = pair_rest$star, size = 7, color=pair_rest$cole) 
+plot_il1_a
+```
+
+## Il1_b
+
+### Mixed model
+```{r, collapse=TRUE}
+
+## filtering data
+model_data <- data_long %>% 
+  filter(!is.na(il1_b_value))
+
+## model fit
+model_il1_b <-  lmer(log10(il1_b_value) ~ 
+                       group_sep +
+                       (1|id), data = model_data)
+
+## diagnostic plot of model
+plot(model_il1_b)
+
+## anova result od model
+Anova(model_il1_b, type=2, test.statistic='F')
+
+## model summary
+summary(model_il1_b)
+```
+
+
+### Pairwise comparison
+
+#### List of contrasts
+
+List of contrast names and left and right coordinates on the X axis
+
+```{r}
+contrast <- c(
+
+  ## healthy vs. others
+  "healthy vs. no rejection D_0",
+  "healthy vs. no rejection D_7",
+  "healthy vs. no rejection D_90",
+  "healthy vs. no rejection D_365",
+  "healthy vs. acute rejection D_0",
+  "healthy vs. acute rejection D_7",
+  "healthy vs. acute rejection D_90",
+  "healthy vs. acute rejection D_365",
+  "healthy vs. acute rejection D_biopsy",
+
+
+  ## between-subjects comparisons
+  "no rejection D_0 vs. acute rejection D_0",
+  "no rejection D_7 vs. acute rejection D_7",
+  "no rejection D_90 vs. acute rejection D_90",
+  "no rejection D_365 vs. acute rejection D_365",
+  "no rejection D_0 vs. acute rejection D_biopsy",
+  "no rejection D_7 vs. acute rejection D_biopsy",
+  "no rejection D_90 vs. acute rejection D_biopsy",
+  "no rejection D_365 vs. acute rejection D_biopsy",
+
+  ## within-subjects comparisons
+  ### no rejection
+  "no rejection D_0 vs. no rejection D_7",
+  "no rejection D_0 vs. no rejection D_90",
+  "no rejection D_0 vs. no rejection D_365",
+  "no rejection D_7 vs. no rejection D_90",
+  "no rejection D_7 vs. no rejection D_365",
+  "no rejection D_90 vs. no rejection D_365",
+
+    ### acute rejection
+  "acute rejection D_0 vs. acute rejection D_7",
+  "acute rejection D_0 vs. acute rejection D_90",
+  "acute rejection D_0 vs. acute rejection D_365",
+  "acute rejection D_7 vs. acute rejection D_90",
+  "acute rejection D_7 vs. acute rejection D_365",
+  "acute rejection D_90 vs. acute rejection D_365",
+  "acute rejection D_0 vs. acute rejection D_biopsy",
+  "acute rejection D_7 vs. acute rejection D_biopsy",
+  "acute rejection D_90 vs. acute rejection D_biopsy",
+  "acute rejection D_365 vs. acute rejection D_biopsy"
+  )
+xcoord_1 <- c(rep(6, 9), seq(0.8, 3.8, 1), seq(0.8, 3.8, 1),
+              rep(0.8, 3), rep(1.8, 2), 2.8,
+              rep(1.2, 3), rep(2.2, 2), 3.2,
+              seq(1.2, 4.2, 1))
+
+xcoord_2 <- c(seq(0.8, 3.8, 1), seq(1.2, 4.2, 1),
+              5, seq(1.2, 4.2, 1), rep(5, 4),
+              seq(1.8, 3.8, 1), 2.8, 3.8, 3.8,
+              2.2, 3.2, 4.2, 3.2, 4.2, 4.2,
+              rep(5, 4))
+
+anot_coord <- (xcoord_1+xcoord_2)/2
+
+pair_table <- data.frame(contrast, xcoord_1, xcoord_2,
+                         anot_coord)
+
+pair_table <- pair_table %>% 
+  mutate(term1 = if_else(xcoord_1 == 6, 'healthy.000', 'other')) %>% 
+  mutate(term1 = if_else(xcoord_1 == 0.8, 'no_rejection.000', term1)) %>% 
+  mutate(term1 = if_else(xcoord_1 == 1.8, 'no_rejection.007', term1)) %>% 
+  mutate(term1 = if_else(xcoord_1 == 2.8, 'no_rejection.090', term1)) %>% 
+  mutate(term1 = if_else(xcoord_1 == 3.8, 'no_rejection.365', term1)) %>% 
+  mutate(term1 = if_else(xcoord_1 == 5, 'acute_rejection.biopsy', term1)) %>% 
+  mutate(term1 = if_else(xcoord_1 == 1.2, 'acute_rejection.000', term1)) %>% 
+  mutate(term1 = if_else(xcoord_1 == 2.2, 'acute_rejection.007', term1)) %>%
+  mutate(term1 = if_else(xcoord_1 == 3.2, 'acute_rejection.090', term1)) %>%
+  mutate(term1 = if_else(xcoord_1 == 4.2, 'acute_rejection.365', term1)) %>%
+  mutate(term2 = if_else(xcoord_2 == 6, 'healthy.000', 'other')) %>% 
+  mutate(term2 = if_else(xcoord_2 == 0.8, 'no_rejection.000', term2)) %>% 
+  mutate(term2 = if_else(xcoord_2 == 1.8, 'no_rejection.007', term2)) %>% 
+  mutate(term2 = if_else(xcoord_2 == 2.8, 'no_rejection.090', term2)) %>% 
+  mutate(term2 = if_else(xcoord_2 == 3.8, 'no_rejection.365', term2)) %>% 
+  mutate(term2 = if_else(xcoord_2 == 5, 'acute_rejection.biopsy', term2)) %>% 
+  mutate(term2 = if_else(xcoord_2 == 1.2, 'acute_rejection.000', term2)) %>% 
+  mutate(term2 = if_else(xcoord_2 == 2.2, 'acute_rejection.007', term2)) %>%
+  mutate(term2 = if_else(xcoord_2 == 3.2, 'acute_rejection.090', term2)) %>%
+  mutate(term2 = if_else(xcoord_2 == 4.2, 'acute_rejection.365', term2))
+  
+  pair_table$p <- NA
+```
+
+
+#### Between-subjects comparisons
+
+```{r, warning=FALSE}
+set.seed(16)
+for (i in 1:17){
+  dat_pair <- model_data %>% 
+    filter(group_sep == paste(pair_table$term1[i])|
+           group_sep == paste(pair_table$term2[i]))
+  
+  g1 <- dat_pair %>% filter(group_sep == paste(pair_table$term1[i]))
+  g2 <- dat_pair %>% filter(group_sep == paste(pair_table$term2[i]))
+  
+  pair_table$p[i] <- wilcox.test(g1$il1_b_value, g2$il1_b_value, paired=FALSE)$p.value
+}
+
+
+```
+
+
+#### Within-subject comparisons
+```{r, warning=FALSE}
+set.seed(16)
+for (i in 18:33){
+  dat_pair <- model_data %>% 
+    filter(group_sep == paste(pair_table$term1[i]) |
+           group_sep == paste(pair_table$term2[i])) %>% 
+    select(id, group_sep, il1_b_value) %>% 
+    pivot_wider(names_from = group_sep, values_from = il1_b_value) %>% 
+    filter(complete.cases(.)) %>% data.frame()
+  
+  g1 <- dat_pair[,2]
+  g2 <- dat_pair[,3]
+  
+  pair_table$p[i] <- wilcox.test(c(g1), c(g2), paired=TRUE)$p.value
+}
+
+
+pair_table <- pair_table[-c(14:15, 19:20, 22, 25:26, 28, 30:33),]
+pair_table$cole <- c(rep("black", 15), rep("blue3", 3), rep("red4", 3))
+pair_table$fdr <- p.adjust(pair_table$p, method = 'BH')
+```
+
+
+#### Resulting table
+```{r}
+## the whole `pair table`
+pair_table
+
+## only significant differences
+pair_table %>% filter(p<0.05) %>% data.frame()
+
+pair_rest <- pair_table %>% 
+  filter(p<0.05,
+         term1 != 'healthy.000') %>% 
+  mutate(star = if_else(p<0.05, '*', '')) %>% 
+  mutate(star = if_else(p<0.01, '**', star)) %>% 
+  mutate(star = if_else(p<0.001, '***', star)) %>%        
+  data.frame()
+```
+
+### Visualization
+```{r, warning=FALSE, fig.height=5.6, fig.width=7.5}
+
+## plot
+plotos <- data_long %>% 
+  filter(!is.na(il1_b_value)) %>% 
+  mutate(group = factor(group, levels = 
+                          c("no_rejection", 
+                            "acute_rejection",
+                            "healthy")),
+         time_point = factor(time_point)) %>% 
+  mutate(time_point = if_else(group == 'healthy', 'healthy', time_point)) %>% 
+  mutate(group_sep = interaction(group, time_point)) %>% 
+  
+## plotting
+  ggplot(aes(x=time_point, y=il1_b_value)) +
+  geom_boxplot(aes(fill=group, group = group_sep), outlier.shape = NA, 
+               size=0.5,position = position_dodge(width = 0.84), color='black') +
+  labs(x = "Time post TX", y = expression("IL-1" * beta * " (pg/ml)")) +
+  scale_x_discrete(labels = c("Before TX", "7 days", "3 months", "365 days",
+                              "Biopsy", "Healthy")) +
+  theme(axis.text = element_text(size = 11),
+        axis.title = element_text(size = 12),
+        legend.text = element_text(size = 11),
+        legend.title = element_text(size = 12)) +
+  scale_fill_manual(values = c("no_rejection" = "skyblue2",
+                               "acute_rejection" = "coral",
+                               "healthy" = "darkolivegreen3"), 
+                    labels = c("no rejection", "acute rejection", "healthy")) +
+  coord_cartesian(ylim = c(0, 28)) +
+  annotate("text", x = 6, y = 10, label = "#", size = 7) 
+
+pair_rest$y <- c(19, 17, 19, 26.5, 21, 25)
+
+plotos <- plotos + geom_segment(data = pair_rest, 
+                                aes(x = xcoord_1, xend = xcoord_2, y = y, yend = y),
+                                color = pair_rest$cole,
+                                linetype = "solid", size = 0.4) 
+plot_il1_b <- plotos + annotate("text", x = pair_rest$anot_coord, y = pair_rest$y+0.5, 
+                            label = pair_rest$star, size = 7, color=pair_rest$cole) 
+plot_il1_b
+```
+
+
+## il1_ra
+
+### Mixed model
+```{r, collapse=TRUE}
+
+## filtering data
+model_data <- data_long %>% 
+  filter(!is.na(il1_ra_value))
+
+## model fit
+model_il1_ra <-  lmer(log10(il1_ra_value) ~ 
+                       group_sep +
+                       (1|id), data = model_data)
+
+## diagnostic plot of model
+plot(model_il1_ra)
+
+## anova result od model
+Anova(model_il1_ra, type=2, test.statistic='F')
+
+## model summary
+summary(model_il1_ra)
+```
+
+
+### Pairwise comparison
+
+#### List of contrasts
+
+List of contrast names and left and right coordinates on the X axis
+
+```{r}
+contrast <- c(
+
+  ## healthy vs. others
+  "healthy vs. no rejection D_0",
+  "healthy vs. no rejection D_7",
+  "healthy vs. no rejection D_90",
+  "healthy vs. no rejection D_365",
+  "healthy vs. acute rejection D_0",
+  "healthy vs. acute rejection D_7",
+  "healthy vs. acute rejection D_90",
+  "healthy vs. acute rejection D_365",
+  "healthy vs. acute rejection D_biopsy",
+
+
+  ## between-subjects comparisons
+  "no rejection D_0 vs. acute rejection D_0",
+  "no rejection D_7 vs. acute rejection D_7",
+  "no rejection D_90 vs. acute rejection D_90",
+  "no rejection D_365 vs. acute rejection D_365",
+  "no rejection D_0 vs. acute rejection D_biopsy",
+  "no rejection D_7 vs. acute rejection D_biopsy",
+  "no rejection D_90 vs. acute rejection D_biopsy",
+  "no rejection D_365 vs. acute rejection D_biopsy",
+
+  ## within-subjects comparisons
+  ### no rejection
+  "no rejection D_0 vs. no rejection D_7",
+  "no rejection D_0 vs. no rejection D_90",
+  "no rejection D_0 vs. no rejection D_365",
+  "no rejection D_7 vs. no rejection D_90",
+  "no rejection D_7 vs. no rejection D_365",
+  "no rejection D_90 vs. no rejection D_365",
+
+    ### acute rejection
+  "acute rejection D_0 vs. acute rejection D_7",
+  "acute rejection D_0 vs. acute rejection D_90",
+  "acute rejection D_0 vs. acute rejection D_365",
+  "acute rejection D_7 vs. acute rejection D_90",
+  "acute rejection D_7 vs. acute rejection D_365",
+  "acute rejection D_90 vs. acute rejection D_365",
+  "acute rejection D_0 vs. acute rejection D_biopsy",
+  "acute rejection D_7 vs. acute rejection D_biopsy",
+  "acute rejection D_90 vs. acute rejection D_biopsy",
+  "acute rejection D_365 vs. acute rejection D_biopsy"
+  )
+xcoord_1 <- c(rep(6, 9), seq(0.8, 3.8, 1), seq(0.8, 3.8, 1),
+              rep(0.8, 3), rep(1.8, 2), 2.8,
+              rep(1.2, 3), rep(2.2, 2), 3.2,
+              seq(1.2, 4.2, 1))
+
+xcoord_2 <- c(seq(0.8, 3.8, 1), seq(1.2, 4.2, 1),
+              5, seq(1.2, 4.2, 1), rep(5, 4),
+              seq(1.8, 3.8, 1), 2.8, 3.8, 3.8,
+              2.2, 3.2, 4.2, 3.2, 4.2, 4.2,
+              rep(5, 4))
+
+anot_coord <- (xcoord_1+xcoord_2)/2
+
+pair_table <- data.frame(contrast, xcoord_1, xcoord_2,
+                         anot_coord)
+
+pair_table <- pair_table %>% 
+  mutate(term1 = if_else(xcoord_1 == 6, 'healthy.000', 'other')) %>% 
+  mutate(term1 = if_else(xcoord_1 == 0.8, 'no_rejection.000', term1)) %>% 
+  mutate(term1 = if_else(xcoord_1 == 1.8, 'no_rejection.007', term1)) %>% 
+  mutate(term1 = if_else(xcoord_1 == 2.8, 'no_rejection.090', term1)) %>% 
+  mutate(term1 = if_else(xcoord_1 == 3.8, 'no_rejection.365', term1)) %>% 
+  mutate(term1 = if_else(xcoord_1 == 5, 'acute_rejection.biopsy', term1)) %>% 
+  mutate(term1 = if_else(xcoord_1 == 1.2, 'acute_rejection.000', term1)) %>% 
+  mutate(term1 = if_else(xcoord_1 == 2.2, 'acute_rejection.007', term1)) %>%
+  mutate(term1 = if_else(xcoord_1 == 3.2, 'acute_rejection.090', term1)) %>%
+  mutate(term1 = if_else(xcoord_1 == 4.2, 'acute_rejection.365', term1)) %>%
+  mutate(term2 = if_else(xcoord_2 == 6, 'healthy.000', 'other')) %>% 
+  mutate(term2 = if_else(xcoord_2 == 0.8, 'no_rejection.000', term2)) %>% 
+  mutate(term2 = if_else(xcoord_2 == 1.8, 'no_rejection.007', term2)) %>% 
+  mutate(term2 = if_else(xcoord_2 == 2.8, 'no_rejection.090', term2)) %>% 
+  mutate(term2 = if_else(xcoord_2 == 3.8, 'no_rejection.365', term2)) %>% 
+  mutate(term2 = if_else(xcoord_2 == 5, 'acute_rejection.biopsy', term2)) %>% 
+  mutate(term2 = if_else(xcoord_2 == 1.2, 'acute_rejection.000', term2)) %>% 
+  mutate(term2 = if_else(xcoord_2 == 2.2, 'acute_rejection.007', term2)) %>%
+  mutate(term2 = if_else(xcoord_2 == 3.2, 'acute_rejection.090', term2)) %>%
+  mutate(term2 = if_else(xcoord_2 == 4.2, 'acute_rejection.365', term2))
+  
+  pair_table$p <- NA
+```
+
+
+#### Between-subjects comparisons
+
+```{r, warning=FALSE}
+set.seed(16)
+for (i in 1:17){
+  dat_pair <- model_data %>% 
+    filter(group_sep == paste(pair_table$term1[i])|
+           group_sep == paste(pair_table$term2[i]))
+  
+  g1 <- dat_pair %>% filter(group_sep == paste(pair_table$term1[i]))
+  g2 <- dat_pair %>% filter(group_sep == paste(pair_table$term2[i]))
+  
+  pair_table$p[i] <- wilcox.test(g1$il1_ra_value, g2$il1_ra_value, paired=FALSE)$p.value
+}
+
+
+```
+
+
+#### Within-subject comparisons
+```{r, warning=FALSE}
+set.seed(16)
+for (i in 18:33){
+  dat_pair <- model_data %>% 
+    filter(group_sep == paste(pair_table$term1[i]) |
+           group_sep == paste(pair_table$term2[i])) %>% 
+    select(id, group_sep, il1_ra_value) %>% 
+    pivot_wider(names_from = group_sep, values_from = il1_ra_value) %>% 
+    filter(complete.cases(.)) %>% data.frame()
+  
+  g1 <- dat_pair[,2]
+  g2 <- dat_pair[,3]
+  
+  pair_table$p[i] <- wilcox.test(c(g1), c(g2), paired=TRUE)$p.value
+}
+
+pair_table <- pair_table[-c(14:15, 19:20, 22, 25:26, 28, 30:33),]
+pair_table$cole <- c(rep("black", 15), rep("blue3", 3), rep("red4", 3))
+pair_table$fdr <- p.adjust(pair_table$p, method = 'BH')
+```
+
+
+#### Resulting table
+```{r}
+## the whole `pair table`
+pair_table
+
+## only significant differences
+pair_table %>% 
+  filter(p<0.05) %>% 
+  select(contrast, p, fdr) %>% 
+  mutate(star = if_else(p<0.05, '*', '')) %>% 
+  mutate(star = if_else(p<0.01, '**', star)) %>% 
+  mutate(star = if_else(p<0.001, '***', star)) %>%        
+  data.frame()
+
+pair_rest <- pair_table %>% 
+  filter(p<0.05,
+         term1 != 'healthy.000') %>% 
+  mutate(star = if_else(p<0.05, '*', '')) %>% 
+  mutate(star = if_else(p<0.01, '**', star)) %>% 
+  mutate(star = if_else(p<0.001, '***', star)) %>%        
+  data.frame()
+```
+
+### Visualization
+```{r, warning=FALSE, fig.height=5.6, fig.width=7.5}
+
+## plot
+plotos <- data_long %>% 
+  filter(!is.na(il1_ra_value)) %>% 
+  mutate(group = factor(group, levels = 
+                          c("no_rejection", 
+                            "acute_rejection",
+                            "healthy")),
+         time_point = factor(time_point)) %>% 
+  mutate(time_point = if_else(group == 'healthy', 'healthy', time_point)) %>% 
+  mutate(group_sep = interaction(group, time_point)) %>% 
+  
+## plotting
+  ggplot(aes(x=time_point, y=il1_ra_value)) +
+  geom_boxplot(aes(fill=group, group = group_sep), outlier.shape = NA, 
+               size=0.5,position = position_dodge(width = 0.84), color='black') +
+  labs(x = "Time post TX", y = "IL-1 RA (pg/ml)") +
+  scale_x_discrete(labels = c("Before TX", "7 days", "3 months", "365 days",
+                              "Biopsy", "Healthy")) +
+  theme(axis.text = element_text(size = 11),
+        axis.title = element_text(size = 12),
+        legend.text = element_text(size = 11),
+        legend.title = element_text(size = 12)) +
+  scale_fill_manual(values = c("no_rejection" = "skyblue2",
+                               "acute_rejection" = "coral",
+                               "healthy" = "darkolivegreen3"), 
+                    labels = c("no rejection", "acute rejection", "healthy")) +
+  coord_cartesian(ylim = c(0, 7000)) +
+  annotate("text", x = 6, y = 2000, label = "#", size = 7) 
+
+pair_rest$y <- c(6900, 4000, 3600)
+
+plotos <- plotos + geom_segment(data = pair_rest, 
+                                aes(x = xcoord_1, xend = xcoord_2, y = y, yend = y),
+                                color = pair_rest$cole,
+                                linetype = "solid", size = 0.4) 
+plot_il1_ra <- plotos + annotate("text", x = pair_rest$anot_coord, y = pair_rest$y+50, 
+                            label = pair_rest$star, size = 7, color=pair_rest$cole) 
+plot_il1_ra
+```
+
+
+
+
+## il18
+
+### Mixed model
+```{r, collapse=TRUE}
+
+## filtering data
+model_data <- data_long %>% 
+  filter(!is.na(il18_value))
+
+## model fit
+model_il18 <-  lmer(log10(il18_value) ~ 
+                       group_sep +
+                       (1|id), data = model_data)
+
+## diagnostic plot of model
+plot(model_il18)
+
+## anova result od model
+Anova(model_il18, type=2, test.statistic='F')
+
+## model summary
+summary(model_il18)
+```
+
+
+### Pairwise comparison
+
+#### List of contrasts
+
+List of contrast names and left and right coordinates on the X axis
+
+```{r}
+contrast <- c(
+
+  ## healthy vs. others
+  "healthy vs. no rejection D_0",
+  "healthy vs. no rejection D_7",
+  "healthy vs. no rejection D_90",
+  "healthy vs. no rejection D_365",
+  "healthy vs. acute rejection D_0",
+  "healthy vs. acute rejection D_7",
+  "healthy vs. acute rejection D_90",
+  "healthy vs. acute rejection D_365",
+  "healthy vs. acute rejection D_biopsy",
+
+
+  ## between-subjects comparisons
+  "no rejection D_0 vs. acute rejection D_0",
+  "no rejection D_7 vs. acute rejection D_7",
+  "no rejection D_90 vs. acute rejection D_90",
+  "no rejection D_365 vs. acute rejection D_365",
+  "no rejection D_0 vs. acute rejection D_biopsy",
+  "no rejection D_7 vs. acute rejection D_biopsy",
+  "no rejection D_90 vs. acute rejection D_biopsy",
+  "no rejection D_365 vs. acute rejection D_biopsy",
+
+  ## within-subjects comparisons
+  ### no rejection
+  "no rejection D_0 vs. no rejection D_7",
+  "no rejection D_0 vs. no rejection D_90",
+  "no rejection D_0 vs. no rejection D_365",
+  "no rejection D_7 vs. no rejection D_90",
+  "no rejection D_7 vs. no rejection D_365",
+  "no rejection D_90 vs. no rejection D_365",
+
+    ### acute rejection
+  "acute rejection D_0 vs. acute rejection D_7",
+  "acute rejection D_0 vs. acute rejection D_90",
+  "acute rejection D_0 vs. acute rejection D_365",
+  "acute rejection D_7 vs. acute rejection D_90",
+  "acute rejection D_7 vs. acute rejection D_365",
+  "acute rejection D_90 vs. acute rejection D_365",
+  "acute rejection D_0 vs. acute rejection D_biopsy",
+  "acute rejection D_7 vs. acute rejection D_biopsy",
+  "acute rejection D_90 vs. acute rejection D_biopsy",
+  "acute rejection D_365 vs. acute rejection D_biopsy"
+  )
+xcoord_1 <- c(rep(6, 9), seq(0.8, 3.8, 1), seq(0.8, 3.8, 1),
+              rep(0.8, 3), rep(1.8, 2), 2.8,
+              rep(1.2, 3), rep(2.2, 2), 3.2,
+              seq(1.2, 4.2, 1))
+
+xcoord_2 <- c(seq(0.8, 3.8, 1), seq(1.2, 4.2, 1),
+              5, seq(1.2, 4.2, 1), rep(5, 4),
+              seq(1.8, 3.8, 1), 2.8, 3.8, 3.8,
+              2.2, 3.2, 4.2, 3.2, 4.2, 4.2,
+              rep(5, 4))
+
+anot_coord <- (xcoord_1+xcoord_2)/2
+
+pair_table <- data.frame(contrast, xcoord_1, xcoord_2,
+                         anot_coord)
+
+pair_table <- pair_table %>% 
+  mutate(term1 = if_else(xcoord_1 == 6, 'healthy.000', 'other')) %>% 
+  mutate(term1 = if_else(xcoord_1 == 0.8, 'no_rejection.000', term1)) %>% 
+  mutate(term1 = if_else(xcoord_1 == 1.8, 'no_rejection.007', term1)) %>% 
+  mutate(term1 = if_else(xcoord_1 == 2.8, 'no_rejection.090', term1)) %>% 
+  mutate(term1 = if_else(xcoord_1 == 3.8, 'no_rejection.365', term1)) %>% 
+  mutate(term1 = if_else(xcoord_1 == 5, 'acute_rejection.biopsy', term1)) %>% 
+  mutate(term1 = if_else(xcoord_1 == 1.2, 'acute_rejection.000', term1)) %>% 
+  mutate(term1 = if_else(xcoord_1 == 2.2, 'acute_rejection.007', term1)) %>%
+  mutate(term1 = if_else(xcoord_1 == 3.2, 'acute_rejection.090', term1)) %>%
+  mutate(term1 = if_else(xcoord_1 == 4.2, 'acute_rejection.365', term1)) %>%
+  mutate(term2 = if_else(xcoord_2 == 6, 'healthy.000', 'other')) %>% 
+  mutate(term2 = if_else(xcoord_2 == 0.8, 'no_rejection.000', term2)) %>% 
+  mutate(term2 = if_else(xcoord_2 == 1.8, 'no_rejection.007', term2)) %>% 
+  mutate(term2 = if_else(xcoord_2 == 2.8, 'no_rejection.090', term2)) %>% 
+  mutate(term2 = if_else(xcoord_2 == 3.8, 'no_rejection.365', term2)) %>% 
+  mutate(term2 = if_else(xcoord_2 == 5, 'acute_rejection.biopsy', term2)) %>% 
+  mutate(term2 = if_else(xcoord_2 == 1.2, 'acute_rejection.000', term2)) %>% 
+  mutate(term2 = if_else(xcoord_2 == 2.2, 'acute_rejection.007', term2)) %>%
+  mutate(term2 = if_else(xcoord_2 == 3.2, 'acute_rejection.090', term2)) %>%
+  mutate(term2 = if_else(xcoord_2 == 4.2, 'acute_rejection.365', term2))
+  
+  pair_table$p <- NA
+```
+
+
+#### Between-subjects comparisons
+
+```{r, warning=FALSE}
+set.seed(16)
+for (i in 1:17){
+  dat_pair <- model_data %>% 
+    filter(group_sep == paste(pair_table$term1[i])|
+           group_sep == paste(pair_table$term2[i]))
+  
+  g1 <- dat_pair %>% filter(group_sep == paste(pair_table$term1[i]))
+  g2 <- dat_pair %>% filter(group_sep == paste(pair_table$term2[i]))
+  
+  pair_table$p[i] <- wilcox.test(g1$il18_value, g2$il18_value, paired=FALSE)$p.value
+}
+
+
+```
+
+
+#### Within-subject comparisons
+```{r, warning=FALSE}
+set.seed(16)
+for (i in 18:33){
+  dat_pair <- model_data %>% 
+    filter(group_sep == paste(pair_table$term1[i]) |
+           group_sep == paste(pair_table$term2[i])) %>% 
+    select(id, group_sep, il18_value) %>% 
+    pivot_wider(names_from = group_sep, values_from = il18_value) %>% 
+    filter(complete.cases(.)) %>% data.frame()
+  
+  g1 <- dat_pair[,2]
+  g2 <- dat_pair[,3]
+  
+  pair_table$p[i] <- wilcox.test(c(g1), c(g2), paired=TRUE)$p.value
+}
+
+pair_table <- pair_table[-c(14:15, 19:20, 22, 25:26, 28, 30:33),]
+pair_table$cole <- c(rep("black", 15), rep("blue3", 3), rep("red4", 3))
+pair_table$fdr <- p.adjust(pair_table$p, method = 'BH')
+```
+
+
+#### Resulting table
+```{r}
+## the whole `pair table`
+pair_table
+
+## only significant differences
+pair_table %>% 
+  filter(p<0.05) %>% 
+  select(contrast, p, fdr) %>% 
+  mutate(star = if_else(p<0.05, '*', '')) %>% 
+  mutate(star = if_else(p<0.01, '**', star)) %>% 
+  mutate(star = if_else(p<0.001, '***', star)) %>%        
+  data.frame()
+
+pair_rest <- pair_table %>% 
+  filter(p<0.05,
+         term1 != 'healthy.000') %>% 
+  mutate(star = if_else(p<0.05, '*', '')) %>% 
+  mutate(star = if_else(p<0.01, '**', star)) %>% 
+  mutate(star = if_else(p<0.001, '***', star)) %>%        
+  data.frame()
+```
+
+### Visualization
+```{r, warning=FALSE, fig.height=5.6, fig.width=7.5}
+
+## plot
+plotos <- data_long %>% 
+  filter(!is.na(il18_value)) %>% 
+  mutate(group = factor(group, levels = 
+                          c("no_rejection", 
+                            "acute_rejection",
+                            "healthy")),
+         time_point = factor(time_point)) %>% 
+  mutate(time_point = if_else(group == 'healthy', 'healthy', time_point)) %>% 
+  mutate(group_sep = interaction(group, time_point)) %>% 
+  
+## plotting
+  ggplot(aes(x=time_point, y=il18_value)) +
+  geom_boxplot(aes(fill=group, group = group_sep), outlier.shape = NA, 
+               size=0.5,position = position_dodge(width = 0.84), color='black') +
+  labs(x = "Time post TX", y = "IL-18 (pg/ml)") +
+  scale_x_discrete(labels = c("Before TX", "7 days", "3 months", "365 days",
+                              "Biopsy", "Healthy")) +
+  theme(axis.text = element_text(size = 11),
+        axis.title = element_text(size = 12),
+        legend.text = element_text(size = 11),
+        legend.title = element_text(size = 12)) +
+  scale_fill_manual(values = c("no_rejection" = "skyblue2",
+                               "acute_rejection" = "coral",
+                               "healthy" = "darkolivegreen3"), 
+                    labels = c("no rejection", "acute rejection", "healthy")) +
+  coord_cartesian(ylim = c(0, 3000)) +
+  annotate("text", x = 6, y = 700, label = "#", size = 7) 
+
+pair_rest$y <- c(2700, 1000, 1700, 2900, 2300, 2100, 1900, 1700)
+
+plotos <- plotos + geom_segment(data = pair_rest, 
+                                aes(x = xcoord_1, xend = xcoord_2, y = y, yend = y),
+                                color = pair_rest$cole,
+                                linetype = "solid", size = 0.4) 
+plot_il18 <- plotos + annotate("text", x = pair_rest$anot_coord, y = pair_rest$y+50, 
+                            label = pair_rest$star, size = 7, color=pair_rest$cole) 
+plot_il18
+```
+
+
+
+
+## il18_bp
+
+### Mixed model
+```{r, collapse=TRUE}
+
+## filtering data
+model_data <- data_long %>% 
+  filter(!is.na(il18_bp_value))
+
+## model fit
+model_il18_bp <-  lmer(log10(il18_bp_value) ~ 
+                       group_sep +
+                       (1|id), data = model_data)
+
+## diagnostic plot of model
+plot(model_il18_bp)
+
+## anova result od model
+Anova(model_il18_bp, type=2, test.statistic='F')
+
+## model summary
+summary(model_il18_bp)
+```
+
+
+### Pairwise comparison
+
+#### List of contrasts
+
+List of contrast names and left and right coordinates on the X axis
+
+```{r}
+contrast <- c(
+
+  ## healthy vs. others
+  "healthy vs. no rejection D_0",
+  "healthy vs. no rejection D_7",
+  "healthy vs. no rejection D_90",
+  "healthy vs. no rejection D_365",
+  "healthy vs. acute rejection D_0",
+  "healthy vs. acute rejection D_7",
+  "healthy vs. acute rejection D_90",
+  "healthy vs. acute rejection D_365",
+  "healthy vs. acute rejection D_biopsy",
+
+
+  ## between-subjects comparisons
+  "no rejection D_0 vs. acute rejection D_0",
+  "no rejection D_7 vs. acute rejection D_7",
+  "no rejection D_90 vs. acute rejection D_90",
+  "no rejection D_365 vs. acute rejection D_365",
+  "no rejection D_0 vs. acute rejection D_biopsy",
+  "no rejection D_7 vs. acute rejection D_biopsy",
+  "no rejection D_90 vs. acute rejection D_biopsy",
+  "no rejection D_365 vs. acute rejection D_biopsy",
+
+  ## within-subjects comparisons
+  ### no rejection
+  "no rejection D_0 vs. no rejection D_7",
+  "no rejection D_0 vs. no rejection D_90",
+  "no rejection D_0 vs. no rejection D_365",
+  "no rejection D_7 vs. no rejection D_90",
+  "no rejection D_7 vs. no rejection D_365",
+  "no rejection D_90 vs. no rejection D_365",
+
+    ### acute rejection
+  "acute rejection D_0 vs. acute rejection D_7",
+  "acute rejection D_0 vs. acute rejection D_90",
+  "acute rejection D_0 vs. acute rejection D_365",
+  "acute rejection D_7 vs. acute rejection D_90",
+  "acute rejection D_7 vs. acute rejection D_365",
+  "acute rejection D_90 vs. acute rejection D_365",
+  "acute rejection D_0 vs. acute rejection D_biopsy",
+  "acute rejection D_7 vs. acute rejection D_biopsy",
+  "acute rejection D_90 vs. acute rejection D_biopsy",
+  "acute rejection D_365 vs. acute rejection D_biopsy"
+  )
+xcoord_1 <- c(rep(6, 9), seq(0.8, 3.8, 1), seq(0.8, 3.8, 1),
+              rep(0.8, 3), rep(1.8, 2), 2.8,
+              rep(1.2, 3), rep(2.2, 2), 3.2,
+              seq(1.2, 4.2, 1))
+
+xcoord_2 <- c(seq(0.8, 3.8, 1), seq(1.2, 4.2, 1),
+              5, seq(1.2, 4.2, 1), rep(5, 4),
+              seq(1.8, 3.8, 1), 2.8, 3.8, 3.8,
+              2.2, 3.2, 4.2, 3.2, 4.2, 4.2,
+              rep(5, 4))
+
+anot_coord <- (xcoord_1+xcoord_2)/2
+
+pair_table <- data.frame(contrast, xcoord_1, xcoord_2,
+                         anot_coord)
+
+pair_table <- pair_table %>% 
+  mutate(term1 = if_else(xcoord_1 == 6, 'healthy.000', 'other')) %>% 
+  mutate(term1 = if_else(xcoord_1 == 0.8, 'no_rejection.000', term1)) %>% 
+  mutate(term1 = if_else(xcoord_1 == 1.8, 'no_rejection.007', term1)) %>% 
+  mutate(term1 = if_else(xcoord_1 == 2.8, 'no_rejection.090', term1)) %>% 
+  mutate(term1 = if_else(xcoord_1 == 3.8, 'no_rejection.365', term1)) %>% 
+  mutate(term1 = if_else(xcoord_1 == 5, 'acute_rejection.biopsy', term1)) %>% 
+  mutate(term1 = if_else(xcoord_1 == 1.2, 'acute_rejection.000', term1)) %>% 
+  mutate(term1 = if_else(xcoord_1 == 2.2, 'acute_rejection.007', term1)) %>%
+  mutate(term1 = if_else(xcoord_1 == 3.2, 'acute_rejection.090', term1)) %>%
+  mutate(term1 = if_else(xcoord_1 == 4.2, 'acute_rejection.365', term1)) %>%
+  mutate(term2 = if_else(xcoord_2 == 6, 'healthy.000', 'other')) %>% 
+  mutate(term2 = if_else(xcoord_2 == 0.8, 'no_rejection.000', term2)) %>% 
+  mutate(term2 = if_else(xcoord_2 == 1.8, 'no_rejection.007', term2)) %>% 
+  mutate(term2 = if_else(xcoord_2 == 2.8, 'no_rejection.090', term2)) %>% 
+  mutate(term2 = if_else(xcoord_2 == 3.8, 'no_rejection.365', term2)) %>% 
+  mutate(term2 = if_else(xcoord_2 == 5, 'acute_rejection.biopsy', term2)) %>% 
+  mutate(term2 = if_else(xcoord_2 == 1.2, 'acute_rejection.000', term2)) %>% 
+  mutate(term2 = if_else(xcoord_2 == 2.2, 'acute_rejection.007', term2)) %>%
+  mutate(term2 = if_else(xcoord_2 == 3.2, 'acute_rejection.090', term2)) %>%
+  mutate(term2 = if_else(xcoord_2 == 4.2, 'acute_rejection.365', term2))
+  
+  pair_table$p <- NA
+```
+
+
+#### Between-subjects comparisons
+
+```{r, warning=FALSE}
+set.seed(16)
+for (i in 1:17){
+  dat_pair <- model_data %>% 
+    filter(group_sep == paste(pair_table$term1[i])|
+           group_sep == paste(pair_table$term2[i]))
+  
+  g1 <- dat_pair %>% filter(group_sep == paste(pair_table$term1[i]))
+  g2 <- dat_pair %>% filter(group_sep == paste(pair_table$term2[i]))
+  
+  pair_table$p[i] <- wilcox.test(g1$il18_bp_value, g2$il18_bp_value, paired=FALSE)$p.value
+}
+
+
+```
+
+
+#### Within-subject comparisons
+```{r, warning=FALSE}
+set.seed(16)
+for (i in 18:33){
+  dat_pair <- model_data %>% 
+    filter(group_sep == paste(pair_table$term1[i]) |
+           group_sep == paste(pair_table$term2[i])) %>% 
+    select(id, group_sep, il18_bp_value) %>% 
+    pivot_wider(names_from = group_sep, values_from = il18_bp_value) %>% 
+    filter(complete.cases(.)) %>% data.frame()
+  
+  g1 <- dat_pair[,2]
+  g2 <- dat_pair[,3]
+  
+  pair_table$p[i] <- wilcox.test(c(g1), c(g2), paired=TRUE)$p.value
+}
+
+pair_table <- pair_table[-c(14:15, 19:20, 22, 25:26, 28, 30:33),]
+pair_table$cole <- c(rep("black", 15), rep("blue3", 3), rep("red4", 3))
+pair_table$fdr <- p.adjust(pair_table$p, method = 'BH')
+```
+
+
+#### Resulting table
+```{r}
+## the whole `pair table`
+pair_table
+
+## only significant differences
+pair_table %>% 
+  filter(p<0.05) %>% 
+  select(contrast, p, fdr) %>% 
+  mutate(star = if_else(p<0.05, '*', '')) %>% 
+  mutate(star = if_else(p<0.01, '**', star)) %>% 
+  mutate(star = if_else(p<0.001, '***', star)) %>%        
+  data.frame()
+
+pair_rest <- pair_table %>% 
+  filter(p<0.05,
+         term1 != 'healthy.000') %>% 
+  mutate(star = if_else(p<0.05, '*', '')) %>% 
+  mutate(star = if_else(p<0.01, '**', star)) %>% 
+  mutate(star = if_else(p<0.001, '***', star)) %>%        
+  data.frame()
+```
+! Healthy group does not differ from others with p<0.001, but some only p<0.05 
+
+### Visualization
+```{r, warning=FALSE, fig.height=5.6, fig.width=7.5}
+
+## plot
+plotos <- data_long %>% 
+  filter(!is.na(il18_bp_value)) %>% 
+  mutate(group = factor(group, levels = 
+                          c("no_rejection", 
+                            "acute_rejection",
+                            "healthy")),
+         time_point = factor(time_point)) %>% 
+  mutate(time_point = if_else(group == 'healthy', 'healthy', time_point)) %>% 
+  mutate(group_sep = interaction(group, time_point)) %>% 
+  
+## plotting
+  ggplot(aes(x=time_point, y=il18_bp_value)) +
+  geom_boxplot(aes(fill=group, group = group_sep), outlier.shape = NA, 
+               size=0.5,position = position_dodge(width = 0.84), color='black') +
+  labs(x = "Time post TX", y = "IL-18 BP (pg/ml)") +
+  scale_x_discrete(labels = c("Before TX", "7 days", "3 months", "365 days",
+                              "Biopsy", "Healthy")) +
+  theme(axis.text = element_text(size = 11),
+        axis.title = element_text(size = 12),
+        legend.text = element_text(size = 11),
+        legend.title = element_text(size = 12)) +
+  scale_fill_manual(values = c("no_rejection" = "skyblue2",
+                               "acute_rejection" = "coral",
+                               "healthy" = "darkolivegreen3"), 
+                    labels = c("no rejection", "acute rejection", "healthy")) +
+  coord_cartesian(ylim = c(0, 7300)) +
+  annotate("text", x = 6, y = 5000, label = "#", size = 7) 
+
+pair_rest$y <- c(5800, 5500, 7200, 6900, 6400, 6100)
+
+plotos <- plotos + geom_segment(data = pair_rest, 
+                                aes(x = xcoord_1, xend = xcoord_2, y = y, yend = y),
+                                color = pair_rest$cole,
+                                linetype = "solid", size = 0.4) 
+plot_il18_bp <- plotos + annotate("text", x = pair_rest$anot_coord, y = pair_rest$y+50, 
+                            label = pair_rest$star, size = 7, color=pair_rest$cole) 
+plot_il18_bp
+```
+
+
+## il18_free
+
+### Mixed model
+```{r, collapse=TRUE}
+
+## filtering data
+model_data <- data_long %>% 
+  filter(!is.na(il18_free))
+
+## model fit
+model_il18_free <-  lmer(log10(il18_free) ~ 
+                       group_sep +
+                       (1|id), data = model_data)
+
+## diagnostic plot of model
+plot(model_il18_free)
+
+## anova result od model
+Anova(model_il18_free, type=2, test.statistic='F')
+
+## model summary
+summary(model_il18_free)
+```
+
+
+### Pairwise comparison
+
+#### List of contrasts
+
+List of contrast names and left and right coordinates on the X axis
+
+```{r}
+contrast <- c(
+
+  ## healthy vs. others
+  "healthy vs. no rejection D_0",
+  "healthy vs. no rejection D_7",
+  "healthy vs. no rejection D_90",
+  "healthy vs. no rejection D_365",
+  "healthy vs. acute rejection D_0",
+  "healthy vs. acute rejection D_7",
+  "healthy vs. acute rejection D_90",
+  "healthy vs. acute rejection D_365",
+  "healthy vs. acute rejection D_biopsy",
+
+
+  ## between-subjects comparisons
+  "no rejection D_0 vs. acute rejection D_0",
+  "no rejection D_7 vs. acute rejection D_7",
+  "no rejection D_90 vs. acute rejection D_90",
+  "no rejection D_365 vs. acute rejection D_365",
+  "no rejection D_0 vs. acute rejection D_biopsy",
+  "no rejection D_7 vs. acute rejection D_biopsy",
+  "no rejection D_90 vs. acute rejection D_biopsy",
+  "no rejection D_365 vs. acute rejection D_biopsy",
+
+  ## within-subjects comparisons
+  ### no rejection
+  "no rejection D_0 vs. no rejection D_7",
+  "no rejection D_0 vs. no rejection D_90",
+  "no rejection D_0 vs. no rejection D_365",
+  "no rejection D_7 vs. no rejection D_90",
+  "no rejection D_7 vs. no rejection D_365",
+  "no rejection D_90 vs. no rejection D_365",
+
+    ### acute rejection
+  "acute rejection D_0 vs. acute rejection D_7",
+  "acute rejection D_0 vs. acute rejection D_90",
+  "acute rejection D_0 vs. acute rejection D_365",
+  "acute rejection D_7 vs. acute rejection D_90",
+  "acute rejection D_7 vs. acute rejection D_365",
+  "acute rejection D_90 vs. acute rejection D_365",
+  "acute rejection D_0 vs. acute rejection D_biopsy",
+  "acute rejection D_7 vs. acute rejection D_biopsy",
+  "acute rejection D_90 vs. acute rejection D_biopsy",
+  "acute rejection D_365 vs. acute rejection D_biopsy"
+  )
+xcoord_1 <- c(rep(6, 9), seq(0.8, 3.8, 1), seq(0.8, 3.8, 1),
+              rep(0.8, 3), rep(1.8, 2), 2.8,
+              rep(1.2, 3), rep(2.2, 2), 3.2,
+              seq(1.2, 4.2, 1))
+
+xcoord_2 <- c(seq(0.8, 3.8, 1), seq(1.2, 4.2, 1),
+              5, seq(1.2, 4.2, 1), rep(5, 4),
+              seq(1.8, 3.8, 1), 2.8, 3.8, 3.8,
+              2.2, 3.2, 4.2, 3.2, 4.2, 4.2,
+              rep(5, 4))
+
+anot_coord <- (xcoord_1+xcoord_2)/2
+
+pair_table <- data.frame(contrast, xcoord_1, xcoord_2,
+                         anot_coord)
+
+pair_table <- pair_table %>% 
+  mutate(term1 = if_else(xcoord_1 == 6, 'healthy.000', 'other')) %>% 
+  mutate(term1 = if_else(xcoord_1 == 0.8, 'no_rejection.000', term1)) %>% 
+  mutate(term1 = if_else(xcoord_1 == 1.8, 'no_rejection.007', term1)) %>% 
+  mutate(term1 = if_else(xcoord_1 == 2.8, 'no_rejection.090', term1)) %>% 
+  mutate(term1 = if_else(xcoord_1 == 3.8, 'no_rejection.365', term1)) %>% 
+  mutate(term1 = if_else(xcoord_1 == 5, 'acute_rejection.biopsy', term1)) %>% 
+  mutate(term1 = if_else(xcoord_1 == 1.2, 'acute_rejection.000', term1)) %>% 
+  mutate(term1 = if_else(xcoord_1 == 2.2, 'acute_rejection.007', term1)) %>%
+  mutate(term1 = if_else(xcoord_1 == 3.2, 'acute_rejection.090', term1)) %>%
+  mutate(term1 = if_else(xcoord_1 == 4.2, 'acute_rejection.365', term1)) %>%
+  mutate(term2 = if_else(xcoord_2 == 6, 'healthy.000', 'other')) %>% 
+  mutate(term2 = if_else(xcoord_2 == 0.8, 'no_rejection.000', term2)) %>% 
+  mutate(term2 = if_else(xcoord_2 == 1.8, 'no_rejection.007', term2)) %>% 
+  mutate(term2 = if_else(xcoord_2 == 2.8, 'no_rejection.090', term2)) %>% 
+  mutate(term2 = if_else(xcoord_2 == 3.8, 'no_rejection.365', term2)) %>% 
+  mutate(term2 = if_else(xcoord_2 == 5, 'acute_rejection.biopsy', term2)) %>% 
+  mutate(term2 = if_else(xcoord_2 == 1.2, 'acute_rejection.000', term2)) %>% 
+  mutate(term2 = if_else(xcoord_2 == 2.2, 'acute_rejection.007', term2)) %>%
+  mutate(term2 = if_else(xcoord_2 == 3.2, 'acute_rejection.090', term2)) %>%
+  mutate(term2 = if_else(xcoord_2 == 4.2, 'acute_rejection.365', term2))
+  
+  pair_table$p <- NA
+```
+
+
+#### Between-subjects comparisons
+
+```{r, warning=FALSE}
+set.seed(16)
+for (i in 1:17){
+  dat_pair <- model_data %>% 
+    filter(group_sep == paste(pair_table$term1[i])|
+           group_sep == paste(pair_table$term2[i]))
+  
+  g1 <- dat_pair %>% filter(group_sep == paste(pair_table$term1[i]))
+  g2 <- dat_pair %>% filter(group_sep == paste(pair_table$term2[i]))
+  
+  pair_table$p[i] <- wilcox.test(g1$il18_free, g2$il18_free, paired=FALSE)$p.value
+}
+
+
+```
+
+
+#### Within-subject comparisons
+```{r, warning=FALSE}
+set.seed(16)
+for (i in 18:33){
+  dat_pair <- model_data %>%
+    filter(group_sep == paste(pair_table$term1[i]) |
+           group_sep == paste(pair_table$term2[i])) %>%
+    select(id, group_sep, il18_free) %>%
+    pivot_wider(names_from = group_sep, values_from = il18_free) %>%
+    filter(complete.cases(.)) %>% data.frame()
+
+  g1 <- dat_pair[,2]
+  g2 <- dat_pair[,3]
+
+  pair_table$p[i] <- wilcox.test(c(g1), c(g2), paired=TRUE)$p.value
+}
+
+pair_table <- pair_table[-c(14:15, 19:20, 22, 25:26, 28, 30:33),]
+pair_table$cole <- c(rep("black", 15), rep("blue3", 3), rep("red4", 3))
+pair_table$fdr <- p.adjust(pair_table$p, method = 'BH')
+```
+
+
+#### Resulting table
+```{r}
+## the whole `pair table`
+pair_table
+
+## only significant differences
+pair_table %>% 
+  filter(p<0.05) %>% 
+  select(contrast, p, fdr) %>% 
+  mutate(star = if_else(p<0.05, '*', '')) %>% 
+  mutate(star = if_else(p<0.01, '**', star)) %>% 
+  mutate(star = if_else(p<0.001, '***', star)) %>%        
+  data.frame()
+
+pair_rest <- pair_table %>% 
+  filter(p<0.05,
+         term1 != 'healthy.000') %>% 
+  mutate(star = if_else(p<0.05, '*', '')) %>% 
+  mutate(star = if_else(p<0.01, '**', star)) %>% 
+  mutate(star = if_else(p<0.001, '***', star)) %>%        
+  data.frame()
+```
+
+### Visualization
+```{r, warning=FALSE, fig.height=5.6, fig.width=7.5}
+
+## plot
+plotos <- data_long %>% 
+  filter(!is.na(il18_free)) %>% 
+  mutate(group = factor(group, levels = 
+                          c("no_rejection", 
+                            "acute_rejection",
+                            "healthy")),
+         time_point = factor(time_point)) %>% 
+  mutate(time_point = if_else(group == 'healthy', 'healthy', time_point)) %>% 
+  mutate(group_sep = interaction(group, time_point)) %>% 
+  
+## plotting
+  ggplot(aes(x=time_point, y=il18_free)) +
+  geom_boxplot(aes(fill=group, group = group_sep), outlier.shape = NA, 
+               size=0.5,position = position_dodge(width = 0.84), color='black') +
+  labs(x = "Time post TX", y = "Free IL-18 (pg/ml)") +
+  scale_x_discrete(labels = c("Before TX", "7 days", "3 months", "365 days",
+                              "Biopsy", "Healthy")) +
+  theme(axis.text = element_text(size = 11),
+        axis.title = element_text(size = 12),
+        legend.text = element_text(size = 11),
+        legend.title = element_text(size = 12)) +
+  scale_fill_manual(values = c("no_rejection" = "skyblue2",
+                               "acute_rejection" = "coral",
+                               "healthy" = "darkolivegreen3"), 
+                    labels = c("no rejection", "acute rejection", "healthy")) +
+  coord_cartesian(ylim = c(0, 1700)) +
+  annotate("text", x = 6, y = 500, label = "#", size = 7) 
+
+pair_rest$y <- c(1650,  700, 1060, 1720, 
+                 830, 1200, 1350, 1280)
+
+plotos <- plotos + geom_segment(data = pair_rest, 
+                                aes(x = xcoord_1, xend = xcoord_2, y = y, yend = y),
+                                color = pair_rest$cole,
+                                linetype = "solid", size = 0.4) 
+plot_il18_free <- plotos + annotate("text", x = pair_rest$anot_coord, y = pair_rest$y+5, 
+                            label = pair_rest$star, size = 7, color=pair_rest$cole) 
+plot_il18_free
+```
+
+## il36_b
+
+### Mixed model
+```{r, collapse=TRUE}
+
+## filtering data
+model_data <- data_long %>% 
+  filter(!is.na(il36_b_value))
+
+## model fit
+model_il36_b <-  lmer(log10(il36_b_value) ~ 
+                       group_sep +
+                       (1|id), data = model_data)
+
+## diagnostic plot of model
+plot(model_il36_b)
+
+## anova result od model
+Anova(model_il36_b, type=2, test.statistic='F')
+
+## model summary
+summary(model_il36_b)
+```
+
+
+### Pairwise comparison
+
+
+
+#### List of contrasts
+
+List of contrast names and left and right coordinates on the X axis
+
+```{r}
+contrast <- c(
+
+  ## healthy vs. others
+  "healthy vs. no rejection D_0",
+  "healthy vs. no rejection D_7",
+  "healthy vs. no rejection D_90",
+  "healthy vs. no rejection D_365",
+  "healthy vs. acute rejection D_0",
+  "healthy vs. acute rejection D_7",
+  "healthy vs. acute rejection D_90",
+  "healthy vs. acute rejection D_365",
+  "healthy vs. acute rejection D_biopsy",
+
+
+  ## between-subjects comparisons
+  "no rejection D_0 vs. acute rejection D_0",
+  "no rejection D_7 vs. acute rejection D_7",
+  "no rejection D_90 vs. acute rejection D_90",
+  "no rejection D_365 vs. acute rejection D_365",
+  "no rejection D_0 vs. acute rejection D_biopsy",
+  "no rejection D_7 vs. acute rejection D_biopsy",
+  "no rejection D_90 vs. acute rejection D_biopsy",
+  "no rejection D_365 vs. acute rejection D_biopsy",
+
+  ## within-subjects comparisons
+  ### no rejection
+  "no rejection D_0 vs. no rejection D_7",
+  "no rejection D_0 vs. no rejection D_90",
+  "no rejection D_0 vs. no rejection D_365",
+  "no rejection D_7 vs. no rejection D_90",
+  "no rejection D_7 vs. no rejection D_365",
+  "no rejection D_90 vs. no rejection D_365",
+
+    ### acute rejection
+  "acute rejection D_0 vs. acute rejection D_7",
+  "acute rejection D_0 vs. acute rejection D_90",
+  "acute rejection D_0 vs. acute rejection D_365",
+  "acute rejection D_7 vs. acute rejection D_90",
+  "acute rejection D_7 vs. acute rejection D_365",
+  "acute rejection D_90 vs. acute rejection D_365",
+  "acute rejection D_0 vs. acute rejection D_biopsy",
+  "acute rejection D_7 vs. acute rejection D_biopsy",
+  "acute rejection D_90 vs. acute rejection D_biopsy",
+  "acute rejection D_365 vs. acute rejection D_biopsy"
+  )
+xcoord_1 <- c(rep(6, 9), seq(0.8, 3.8, 1), seq(0.8, 3.8, 1),
+              rep(0.8, 3), rep(1.8, 2), 2.8,
+              rep(1.2, 3), rep(2.2, 2), 3.2,
+              seq(1.2, 4.2, 1))
+
+xcoord_2 <- c(seq(0.8, 3.8, 1), seq(1.2, 4.2, 1),
+              5, seq(1.2, 4.2, 1), rep(5, 4),
+              seq(1.8, 3.8, 1), 2.8, 3.8, 3.8,
+              2.2, 3.2, 4.2, 3.2, 4.2, 4.2,
+              rep(5, 4))
+
+anot_coord <- (xcoord_1+xcoord_2)/2
+
+pair_table <- data.frame(contrast, xcoord_1, xcoord_2,
+                         anot_coord)
+
+pair_table <- pair_table %>% 
+  mutate(term1 = if_else(xcoord_1 == 6, 'healthy.000', 'other')) %>% 
+  mutate(term1 = if_else(xcoord_1 == 0.8, 'no_rejection.000', term1)) %>% 
+  mutate(term1 = if_else(xcoord_1 == 1.8, 'no_rejection.007', term1)) %>% 
+  mutate(term1 = if_else(xcoord_1 == 2.8, 'no_rejection.090', term1)) %>% 
+  mutate(term1 = if_else(xcoord_1 == 3.8, 'no_rejection.365', term1)) %>% 
+  mutate(term1 = if_else(xcoord_1 == 5, 'acute_rejection.biopsy', term1)) %>% 
+  mutate(term1 = if_else(xcoord_1 == 1.2, 'acute_rejection.000', term1)) %>% 
+  mutate(term1 = if_else(xcoord_1 == 2.2, 'acute_rejection.007', term1)) %>%
+  mutate(term1 = if_else(xcoord_1 == 3.2, 'acute_rejection.090', term1)) %>%
+  mutate(term1 = if_else(xcoord_1 == 4.2, 'acute_rejection.365', term1)) %>%
+  mutate(term2 = if_else(xcoord_2 == 6, 'healthy.000', 'other')) %>% 
+  mutate(term2 = if_else(xcoord_2 == 0.8, 'no_rejection.000', term2)) %>% 
+  mutate(term2 = if_else(xcoord_2 == 1.8, 'no_rejection.007', term2)) %>% 
+  mutate(term2 = if_else(xcoord_2 == 2.8, 'no_rejection.090', term2)) %>% 
+  mutate(term2 = if_else(xcoord_2 == 3.8, 'no_rejection.365', term2)) %>% 
+  mutate(term2 = if_else(xcoord_2 == 5, 'acute_rejection.biopsy', term2)) %>% 
+  mutate(term2 = if_else(xcoord_2 == 1.2, 'acute_rejection.000', term2)) %>% 
+  mutate(term2 = if_else(xcoord_2 == 2.2, 'acute_rejection.007', term2)) %>%
+  mutate(term2 = if_else(xcoord_2 == 3.2, 'acute_rejection.090', term2)) %>%
+  mutate(term2 = if_else(xcoord_2 == 4.2, 'acute_rejection.365', term2))
+  
+  pair_table$p <- NA
+```
+
+
+#### Between-subjects comparisons
+
+```{r, warning=FALSE}
+set.seed(16)
+for (i in 1:17){
+  dat_pair <- model_data %>% 
+    filter(group_sep == paste(pair_table$term1[i])|
+           group_sep == paste(pair_table$term2[i]))
+  
+  g1 <- dat_pair %>% filter(group_sep == paste(pair_table$term1[i]))
+  g2 <- dat_pair %>% filter(group_sep == paste(pair_table$term2[i]))
+  
+  pair_table$p[i] <- wilcox.test(g1$il36_b_value, g2$il36_b_value, paired=FALSE)$p.value
+}
+
+
+```
+
+
+#### Within-subject comparisons
+```{r, warning=FALSE}
+set.seed(16)
+for (i in 18:33){
+  dat_pair <- model_data %>% 
+    filter(group_sep == paste(pair_table$term1[i]) |
+           group_sep == paste(pair_table$term2[i])) %>% 
+    select(id, group_sep, il36_b_value) %>% 
+    pivot_wider(names_from = group_sep, values_from = il36_b_value) %>% 
+    filter(complete.cases(.)) %>% data.frame()
+  
+  g1 <- dat_pair[,2]
+  g2 <- dat_pair[,3]
+  
+  pair_table$p[i] <- wilcox.test(c(g1), c(g2), paired=TRUE)$p.value
+}
+
+pair_table <- pair_table[-c(14:15, 19:20, 22, 25:26, 28, 30:33),]
+pair_table$cole <- c(rep("black", 15), rep("blue3", 3), rep("red4", 3))
+pair_table$fdr <- p.adjust(pair_table$p, method = 'BH')
+```
+
+
+#### Resulting table
+```{r}
+## the whole `pair table`
+pair_table
+
+## only significant differences
+pair_table %>% 
+  filter(p<0.05) %>% 
+  select(contrast, p, fdr) %>% 
+  mutate(star = if_else(p<0.05, '*', '')) %>% 
+  mutate(star = if_else(p<0.01, '**', star)) %>% 
+  mutate(star = if_else(p<0.001, '***', star)) %>%        
+  data.frame()
+
+pair_rest <- pair_table %>% 
+  filter(p<0.05,
+         term1 != 'healthy.000') %>% 
+  mutate(star = if_else(p<0.05, '*', '')) %>% 
+  mutate(star = if_else(p<0.01, '**', star)) %>% 
+  mutate(star = if_else(p<0.001, '***', star)) %>%        
+  data.frame()
+```
+
+Healthy does differ from all but acute rejection during biopsy and D365
+
+### Visualization
+```{r, warning=FALSE, fig.height=5.6, fig.width=7.5}
+
+## plot
+plotos <- data_long %>% 
+  filter(!is.na(il36_b_value)) %>% 
+  mutate(group = factor(group, levels = 
+                          c("no_rejection", 
+                            "acute_rejection",
+                            "healthy")),
+         time_point = factor(time_point)) %>% 
+  mutate(time_point = if_else(group == 'healthy', 'healthy', time_point)) %>% 
+  mutate(group_sep = interaction(group, time_point)) %>% 
+  
+## plotting
+  ggplot(aes(x=time_point, y=il36_b_value)) +
+  geom_boxplot(aes(fill=group, group = group_sep), outlier.shape = NA, 
+               size=0.5,position = position_dodge(width = 0.84), color='black') +
+  labs(x = "Time post TX", y = expression("IL-36" * beta * " (pg/ml)")) +
+  scale_x_discrete(labels = c("Before TX", "7 days", "3 months", "365 days",
+                              "Biopsy", "Healthy")) +
+  theme(axis.text = element_text(size = 11),
+        axis.title = element_text(size = 12),
+        legend.text = element_text(size = 11),
+        legend.title = element_text(size = 12)) +
+  scale_fill_manual(values = c("no_rejection" = "skyblue2",
+                               "acute_rejection" = "coral",
+                               "healthy" = "darkolivegreen3"), 
+                    labels = c("no rejection", "acute rejection", "healthy")) +
+    coord_cartesian(ylim = c(0, 15.5)) +
+  annotate("text", x = 6, y = 5, label = "#", size = 7) 
+
+pair_rest$y <-  c(9.9,  7, 6.4,  9,  
+                  8.1, 15.5, 12.5, 11.5)
+
+plotos <- plotos + geom_segment(data = pair_rest, 
+                                aes(x = xcoord_1, xend = xcoord_2, y = y, yend = y),
+                                color = pair_rest$cole,
+                                linetype = "solid", size = 0.4) 
+plot_il36_b <- plotos + annotate("text", x = pair_rest$anot_coord, y = pair_rest$y+0.15, 
+                            label = pair_rest$star, size = 7, color=pair_rest$cole) 
+plot_il36_b
+```
+
+
+
+# Correlation of ILs and renal function markers
+
+## Simple correlation matrix based on patient data
+```{r, fig.height=9, fig.width=10}
+tr_cor <- patient_table %>%
+   filter(group != 'healthy') %>% 
+  select(egfr_mean:il36_b_mean) 
+
+
+cor.mtest(tr_cor, conf.level = 0.95)
+
+tr_cor <- cor(tr_cor, method='spearman', 
+              use = 'pairwise.complete.obs') 
+corrplot(tr_cor, addCoef.col = 'black',tl.col = "white")
+text(1:9, 9.9, expression("eGFR", "Creatinine", "IL-1" * alpha, 
+                           "IL-1" * beta, "IL-1 RA", "IL-18", "IL-18 BP",
+               "IL-18 (free)",  "IL-36" * beta))
+
+text(-0.1, 9:1,  expression("eGFR", "Creatinine", "IL-1" * alpha, 
+                           "IL-1" * beta, "IL-1 RA", "IL-18", "IL-18 BP",
+               "IL-18 (free)",  "IL-1" * beta))
+```
+
+There is not any significant correlation between interleukins and markers of renal function. At least modest (but still not statistically significant) correlation is for interleukin-18BP.
+
+## Adjsuting IL-18BP model for renal function
+To further validate that renal functions does not play an important role for above-shown findings, we will re-fit mixed-effects model adjusting also for the effect of renal function. We will do it only for IL-18BP where modest correlation between average values of renal markers and IL-18BP levels was found.
+
+### Adjustment for EGFR
+```{r}
+model_data <- data_long %>% 
+  filter(!is.na(il18_bp_value))
+
+## Complex models (incuding healthy and biopsy data)
+model_il18_bp <-  lmer(log10(il18_bp_value) ~ 
+                       group_sep +
+                       (1|id), data = model_data, REML = FALSE)
+
+model_il18_bp_adjEGFR <-  lmer(log10(il18_bp_value) ~ log2(egfr) +
+                       group_sep +
+                       (1|id), data = model_data, REML = FALSE)
+
+model_il18_bp_adjEGFR_REML <-  lmer(log10(il18_bp_value) ~ log2(egfr) +
+                       group_sep +
+                       (1|id), data = model_data, REML = TRUE)
+
+Anova(model_il18_bp_adjEGFR_REML, type=2, test.statistic='F')
+summary(model_il18_bp_adjEGFR_REML)
+AIC(model_il18_bp, model_il18_bp_adjEGFR)
+BIC(model_il18_bp, model_il18_bp_adjEGFR)
+
+
+## Patient-only, planned-measures-only models
+model_data <- data_long %>% 
+  filter(!is.na(il18_bp_value),
+         group != 'healthy',
+         time_point != 'biopsy')
+
+model_il18_bp <-  lmer(log10(il18_bp_value) ~ 
+                       group*time_point +
+                       (1|id), data = model_data, REML = FALSE)
+
+model_il18_bp_adjEGFR <-  lmer(log10(il18_bp_value) ~ log2(egfr) +
+                       group*time_point +
+                       (1|id), data = model_data, REML = FALSE)
+
+model_il18_bp_adjEGFR_REML <-  lmer(log10(il18_bp_value) ~ log2(egfr) +
+                       group*time_point +
+                       (1|id), data = model_data, REML = TRUE)
+
+Anova(model_il18_bp_adjEGFR_REML, type=2, test.statistic='F')
+summary(model_il18_bp_adjEGFR_REML)
+AIC(model_il18_bp, model_il18_bp_adjEGFR)
+BIC(model_il18_bp, model_il18_bp_adjEGFR)
+
+```
+Inclusion of EGFR improves the fit noticeably
+
+### Adjustment for creatinine
+```{r}
+
+
+## Complex models (including healthy and biopsy data)
+
+model_data <- data_long %>% 
+  filter(!is.na(il18_bp_value))
+
+model_il18_bp <-  lmer(log10(il18_bp_value) ~ 
+                       group_sep +
+                       (1|id), data = model_data, REML = FALSE)
+
+model_il18_bp_adjCRE <-  lmer(log2(il18_bp_value) ~ log2(creatinine) +
+                       group_sep +
+                       (1|id), data = model_data, REML = FALSE)
+
+model_il18_bp_adjCRE_REML <-  lmer(log10(il18_bp_value) ~ log2(creatinine) +
+                       group_sep +
+                       (1|id), data = model_data, REML = TRUE)
+
+Anova(model_il18_bp_adjCRE_REML, type=2, test.statistic='F')
+summary(model_il18_bp_adjCRE_REML)
+AIC(model_il18_bp, model_il18_bp_adjCRE)
+BIC(model_il18_bp, model_il18_bp_adjCRE)
+
+
+## Patient-only, planned-measures-only models
+model_data <- data_long %>% 
+  filter(!is.na(il18_bp_value),
+         group != 'healthy',
+         time_point != 'biopsy')
+
+model_il18_bp <-  lmer(log10(il18_bp_value) ~ 
+                       group*time_point +
+                       (1|id), data = model_data, REML = FALSE)
+
+model_il18_bp_adjEGFR <-  lmer(log10(il18_bp_value) ~ log2(egfr) +
+                       group*time_point +
+                       (1|id), data = model_data, REML = FALSE)
+
+model_il18_bp_adjEGFR_REML <-  lmer(log10(il18_bp_value) ~ log2(egfr) +
+                       group*time_point +
+                       (1|id), data = model_data, REML = TRUE)
+
+Anova(model_il18_bp_adjEGFR_REML, type=2, test.statistic='F')
+AIC(model_il18_bp, model_il18_bp_adjEGFR)
+BIC(model_il18_bp, model_il18_bp_adjEGFR)
+```
+
+
+The analysis shows that when renal function are accounted for (included as a covariate to the mixed-effects model), there is no remaining variability explainable by other factors such as `group` [acute rejection/no rejection/healthy], `time_point` and `group:timepoint` interaction. It suggests that IL-18BP might be driven mainly with renal function and its change over time whereas the effects of `group` and `timepoint` etc may be indirect. 
+
+
+## Adjusted free IL-18 model
+
+Given that IL-18BP is affected with renal function, and the IL18-BP affects level of other forms of IL-18 (including free IL-18), we will fit model explaining the IL-18 levels but simultaneously adjusting for renal functions
+
+### Adjustment for EGFR
+```{r}
+model_data <- data_long %>% 
+  filter(!is.na(il18_free))
+
+## Complex models (incuding healthy and biopsy data)
+model_il18_free <-  lmer(log10(il18_free) ~ 
+                       group_sep +
+                       (1|id), data = model_data, REML = FALSE)
+
+model_il18_free_adjEGFR <-  lmer(log10(il18_free) ~ log2(egfr) +
+                       group_sep +
+                       (1|id), data = model_data, REML = FALSE)
+
+model_il18_free_adjEGFR_REML <-  lmer(log10(il18_free) ~ log2(egfr) +
+                       group_sep +
+                       (1|id), data = model_data, REML = TRUE)
+
+Anova(model_il18_free_adjEGFR_REML, type=2, test.statistic='F')
+AIC(model_il18_free, model_il18_free_adjEGFR)
+BIC(model_il18_free, model_il18_free_adjEGFR)
+
+## contrasts
+em_il18_free <- emmeans(model_il18_free_adjEGFR_REML, specs = pairwise ~ group_sep, 
+              adjust = 'none', type = 'response')
+
+em_il18_free_cont <- data.frame(em_il18_free$contrasts)[c(
+  1:3, 10:17, 19, 25, 26, 32, 36, 37, 39, 42, 43, 45
+),]
+
+as_tibble(em_il18_free_cont) %>% 
+  filter(p.value<0.05) %>% data.frame()
+
+## Patient-only, planned-measures-only models
+model_data <- data_long %>% 
+  filter(!is.na(il18_free),
+         group != 'healthy',
+         time_point != 'biopsy')
+
+model_il18_free <-  lmer(log10(il18_free) ~ 
+                       group*time_point +
+                       (1|id), data = model_data, REML = FALSE)
+
+model_il18_free_adjEGFR <-  lmer(log10(il18_free) ~ log2(egfr) +
+                       group*time_point +
+                       (1|id), data = model_data, REML = FALSE)
+
+model_il18_free_adjEGFR_REML <-  lmer(log10(il18_free) ~ log2(egfr) +
+                       group*time_point +
+                       (1|id), data = model_data, REML = TRUE)
+
+Anova(model_il18_free_adjEGFR_REML, type=2, test.statistic='F')
+AIC(model_il18_free, model_il18_free_adjEGFR)
+BIC(model_il18_free, model_il18_free_adjEGFR)
+
+```
+Inclusion of EGFR improves the fit noticeably
+
+### Adjustment for creatinine
+```{r}
+
+
+## Complex models (including healthy and biopsy data)
+
+model_data <- data_long %>% 
+  filter(!is.na(il18_free))
+
+model_il18_free <-  lmer(log10(il18_free) ~ 
+                       group_sep +
+                       (1|id), data = model_data, REML = FALSE)
+
+model_il18_free_adjCRE <-  lmer(log10(il18_free) ~ log2(creatinine) +
+                       group_sep +
+                       (1|id), data = model_data, REML = FALSE)
+
+model_il18_free_adjCRE_REML <-  lmer(log10(il18_free) ~ log2(creatinine) +
+                       group_sep +
+                       (1|id), data = model_data, REML = TRUE)
+
+Anova(model_il18_free_adjCRE_REML, type=2, test.statistic='F')
+AIC(model_il18_free, model_il18_free_adjCRE)
+BIC(model_il18_free, model_il18_free_adjCRE)
+
+## contrasts
+em_il18_free <- emmeans(model_il18_free_adjCRE_REML, specs = pairwise ~ group_sep, 
+              adjust = 'none', type = 'response')
+
+em_il18_free_cont <- data.frame(em_il18_free$contrasts)[c(
+  1:3, 10:17, 19, 25, 26, 32, 36, 37, 39, 42, 43, 45
+),]
+
+as_tibble(em_il18_free_cont) %>% 
+  filter(p.value<0.05) %>% data.frame()
+
+
+## Patient-only, planned-measures-only models
+model_data <- data_long %>% 
+  filter(!is.na(il18_free),
+         group != 'healthy',
+         time_point != 'biopsy')
+
+model_il18_free <-  lmer(log10(il18_free) ~ 
+                       group*time_point +
+                       (1|id), data = model_data, REML = FALSE)
+
+model_il18_free_adjEGFR <-  lmer(log10(il18_free) ~ log2(egfr) +
+                       group*time_point +
+                       (1|id), data = model_data, REML = FALSE)
+
+model_il18_free_adjEGFR_REML <-  lmer(log10(il18_free) ~ log2(egfr) +
+                       group*time_point +
+                       (1|id), data = model_data, REML = TRUE)
+
+Anova(model_il18_free_adjEGFR_REML, type=2, test.statistic='F')
+AIC(model_il18_free, model_il18_free_adjEGFR)
+BIC(model_il18_free, model_il18_free_adjEGFR)
+```
+
+Adjustment for renal function does not modify result of the model explaining free IL-18. Markers of renal function do not clearly affect the pattern of difference in free IL-18 levels across groups or time points
+
+What about total IL-18?
+
+## Adjusted total IL-18 model
+
+### Adjustment for EGFR
+```{r}
+model_data <- data_long %>% 
+  filter(!is.na(il18_value))
+
+## Complex models (incuding healthy and biopsy data)
+model_il18_value <-  lmer(log10(il18_value) ~ 
+                       group_sep +
+                       (1|id), data = model_data, REML = FALSE)
+
+model_il18_value_adjEGFR <-  lmer(log10(il18_value) ~ log2(egfr) +
+                       group_sep +
+                       (1|id), data = model_data, REML = FALSE)
+
+model_il18_value_adjEGFR_REML <-  lmer(log10(il18_value) ~ log2(egfr) +
+                       group_sep +
+                       (1|id), data = model_data, REML = TRUE)
+
+Anova(model_il18_value_adjEGFR_REML, type=2, test.statistic='F')
+AIC(model_il18_value, model_il18_value_adjEGFR)
+BIC(model_il18_value, model_il18_value_adjEGFR)
+
+## contrasts
+em_il18_value <- emmeans(model_il18_value_adjEGFR_REML, specs = pairwise ~ group_sep, 
+              adjust = 'none', type = 'response')
+
+em_il18_value_cont <- data.frame(em_il18_value$contrasts)[c(
+  1:3, 10:17, 19, 25, 26, 32, 36, 37, 39, 42, 43, 45
+),]
+
+as_tibble(em_il18_value_cont) %>% 
+  filter(p.value<0.05) %>% data.frame()
+
+## Patient-only, planned-measures-only models
+model_data <- data_long %>% 
+  filter(!is.na(il18_value),
+         group != 'healthy',
+         time_point != 'biopsy')
+
+model_il18_value <-  lmer(log10(il18_value) ~ 
+                       group*time_point +
+                       (1|id), data = model_data, REML = FALSE)
+
+model_il18_value_adjEGFR <-  lmer(log10(il18_value) ~ log2(egfr) +
+                       group*time_point +
+                       (1|id), data = model_data, REML = FALSE)
+
+model_il18_value_adjEGFR_REML <-  lmer(log10(il18_value) ~ log2(egfr) +
+                       group*time_point +
+                       (1|id), data = model_data, REML = TRUE)
+
+Anova(model_il18_value_adjEGFR_REML, type=2, test.statistic='F')
+AIC(model_il18_value, model_il18_value_adjEGFR)
+BIC(model_il18_value, model_il18_value_adjEGFR)
+
+```
+
+
+### Adjustment for creatinine
+```{r}
+
+
+## Complex models (including healthy and biopsy data)
+
+model_data <- data_long %>% 
+  filter(!is.na(il18_value))
+
+model_il18_value <-  lmer(log10(il18_value) ~ 
+                       group_sep +
+                       (1|id), data = model_data, REML = FALSE)
+
+model_il18_value_adjCRE <-  lmer(log10(il18_value) ~ log2(creatinine) +
+                       group_sep +
+                       (1|id), data = model_data, REML = FALSE)
+
+model_il18_value_adjCRE_REML <-  lmer(log10(il18_value) ~ log2(creatinine) +
+                       group_sep +
+                       (1|id), data = model_data, REML = TRUE)
+
+Anova(model_il18_value_adjCRE_REML, type=2, test.statistic='F')
+AIC(model_il18_value, model_il18_value_adjCRE)
+BIC(model_il18_value, model_il18_value_adjCRE)
+
+## contrasts
+em_il18_value <- emmeans(model_il18_value_adjCRE_REML, specs = pairwise ~ group_sep, 
+              adjust = 'none', type = 'response')
+
+em_il18_value_cont <- data.frame(em_il18_value$contrasts)[c(
+  1:3, 10:17, 19, 25, 26, 32, 36, 37, 39, 42, 43, 45
+),]
+
+as_tibble(em_il18_value_cont) %>% 
+  filter(p.value<0.05) %>% data.frame()
+
+
+## Patient-only, planned-measures-only models
+model_data <- data_long %>% 
+  filter(!is.na(il18_value),
+         group != 'healthy',
+         time_point != 'biopsy')
+
+model_il18_value <-  lmer(log10(il18_value) ~ 
+                       group*time_point +
+                       (1|id), data = model_data, REML = FALSE)
+
+model_il18_value_adjEGFR <-  lmer(log10(il18_value) ~ log2(egfr) +
+                       group*time_point +
+                       (1|id), data = model_data, REML = FALSE)
+
+model_il18_value_adjEGFR_REML <-  lmer(log10(il18_value) ~ log2(egfr) +
+                       group*time_point +
+                       (1|id), data = model_data, REML = TRUE)
+
+Anova(model_il18_value_adjEGFR_REML, type=2, test.statistic='F')
+AIC(model_il18_value, model_il18_value_adjEGFR)
+BIC(model_il18_value, model_il18_value_adjEGFR)
+```
+
+Adjustment for renal function does not modify the results of the models explaining total IL-18. Markers of renal function do not clearly affect the above-shown patterns in total IL-18 levels and their difference across groups or time points
+
+
+## Renal function adjusment for other interleukins
+
+### IL-1a
+```{r}
+model_data <- data_long %>% 
+  filter(!is.na(il1_a_value))
+
+## eGFR
+model_il1a_value_adjEGFR <-  lmer(log10(il1_a_value) ~ log10(egfr) +
+                       group_sep +
+                       (1|id), data = model_data, REML = TRUE)
+
+Anova(model_il1a_value_adjEGFR, type=2, test.statistic='F')
+summary(model_il1a_value_adjEGFR)
+
+## creatinine
+model_il1a_value_adjCRE <-  lmer(log10(il1_a_value) ~ log10(creatinine) +
+                       group_sep +
+                       (1|id), data = model_data, REML = TRUE)
+
+Anova(model_il1a_value_adjCRE, type=2, test.statistic='F')
+summary(model_il1a_value_adjCRE)
+
+## eGFR, simpler model (biopsy and healthy people not included)
+model_data <- data_long %>% 
+  filter(!is.na(il1_a_value)) %>% 
+  filter(group != 'healthy',
+         time_point != 'biopsy')
+
+model_il1a_value_adjEGFR_simple <-  lmer(log10(il1_a_value) ~ log10(egfr) +
+                       group*time_point+
+                       (1|id), data = model_data, REML = TRUE)
+
+Anova(model_il1a_value_adjEGFR_simple , type=2, test.statistic='F')
+summary(model_il1a_value_adjEGFR_simple)
+```
+There is sign that renal function affect also IL-1b, but it seems to be driven mainly by the difference of healthy subject. Analysis taking into account only planned measurements from patients does not show any indication that renal function affects the IL-1b levels. 
+
+
+### IL-1b
+```{r}
+model_data <- data_long %>% 
+  filter(!is.na(il1_b_value))
+
+## eGFR
+model_il1a_value_adjEGFR <-  lmer(log10(il1_b_value) ~ log2(egfr) +
+                       group_sep +
+                       (1|id), data = model_data, REML = TRUE)
+
+Anova(model_il1a_value_adjEGFR, type=2, test.statistic='F')
+summary(model_il1a_value_adjEGFR)
+
+## creatinine
+model_il1a_value_adjCRE <-  lmer(log10(il1_b_value) ~ log10(creatinine) +
+                       group_sep +
+                       (1|id), data = model_data, REML = TRUE)
+
+Anova(model_il1a_value_adjCRE, type=2, test.statistic='F')
+summary(model_il1a_value_adjCRE)
+```
+
+
+### IL-1a
+```{r}
+model_data <- data_long %>% 
+  filter(!is.na(il1_ra_value))
+
+## eGFR
+model_il1a_value_adjEGFR <-  lmer(log10(il1_ra_value) ~ log10(egfr) +
+                       group_sep +
+                       (1|id), data = model_data, REML = TRUE)
+
+Anova(model_il1a_value_adjEGFR, type=2, test.statistic='F')
+summary(model_il1a_value_adjEGFR)
+
+## creatinine
+model_il1a_value_adjCRE <-  lmer(log10(il1_ra_value) ~ log10(creatinine) +
+                       group_sep +
+                       (1|id), data = model_data, REML = TRUE)
+
+Anova(model_il1a_value_adjCRE, type=2, test.statistic='F')
+summary(model_il1a_value_adjCRE)
+```
+
+
+### IL-36b
+```{r}
+model_data <- data_long %>% 
+  filter(!is.na(il36_b_value))
+
+## eGFR
+model_il1a_value_adjEGFR <-  lmer(log10(il36_b_value) ~ log10(egfr) +
+                       group_sep +
+                       (1|id), data = model_data, REML = TRUE)
+
+Anova(model_il1a_value_adjEGFR, type=2, test.statistic='F')
+summary(model_il1a_value_adjEGFR)
+
+## creatinine
+model_il1a_value_adjCRE <-  lmer(log10(il36_b_value) ~ log10(creatinine) +
+                       group_sep +
+                       (1|id), data = model_data, REML = TRUE)
+
+Anova(model_il1a_value_adjCRE, type=2, test.statistic='F')
+summary(model_il1a_value_adjCRE)
+```
+
+# IL18 forms plot
+
+At first, we need to transform IL-18 levels to molar concentration (pM/L)
+```{r}
+data_long <- data_long %>% 
+  mutate( il18bp_pM = (((il18_bp_value/1e12)*1000) / 19000)*1e12,
+         il18tot_pM = (((il18_value/1e12)*1000) / 17200)*1e12,
+        il18free_pM = (((il18_free/1e12)*1000) / 17200) *1e12)
+```
+
+
+Now we can construct plots showing the relationship between IL-18BP levels and levels of IL-18 (free and total). We will show it with focus on healthy individuals, and for 1st measurement of the group without rejection where the IL-18BP and IL-18 were most variable, with examples of minimal as well as vy high bounding
+
+```{r, fig.height=6, fig.width=7}
+## prepare data
+il18d <- data_long %>% 
+  filter(!is.na(il18_value),
+         !is.na(il18_bp_value),
+         !is.na(il18_free)) %>% 
+  mutate(group = factor(group, levels = 
+                          c("no_rejection", 
+                            "acute_rejection",
+                            "healthy")),
+         time_point = factor(time_point)) %>% 
+  mutate(time_point = if_else(group == 'healthy', 'healthy', time_point)) %>% 
+  mutate(group_sep = interaction(group, time_point))
+
+## Plot for healthy
+p18_healthy <- il18d %>% 
+  filter(group_sep == 'healthy.healthy') %>% 
+  ggplot(aes(x = il18bp_pM)) +
+  geom_point(aes(y = il18free_pM, color = "IL-18 Free")) +  
+  geom_point(aes(y = il18tot_pM, color = "IL-18 Total"), pch=1) +  
+  geom_line(data = . %>% 
+              select(il18bp_pM, il18free_pM,  il18tot_pM) %>% 
+              pivot_longer(cols = -il18bp_pM, 
+                           names_to = "variable", values_to = "value"),
+            aes(x = il18bp_pM, y = value, group = il18bp_pM), col = 'grey20') +
+  scale_color_manual(values = c("IL-18 Free" = "blue", "IL-18 Total" = "red")) +
+  labs(x = "IL-18BP (pM)", y = "IL-18 (pM)", color = "") +
+  coord_cartesian(ylim = c(0, NA)) +
+  ggtitle("Samples from healthy donors")
+p18_healthy
+if(file.exists('gitignore/figures/p18_healthy.pdf') == FALSE){
+  ggsave("gitignore/figures/p18_healthy.pdf", 
+         plot = p18_healthy, width = 8, height = 5.5, units = "in")
+}
+
+## plot for D0, group without rejection
+p18_no_reject_0 <- il18d %>% 
+  filter(group_sep == 'no_rejection.000') %>% 
+  ggplot(aes(x = il18bp_pM)) +
+  geom_point(aes(y = il18free_pM, color = "IL-18 Free")) +  
+  geom_point(aes(y = il18tot_pM, color = "IL-18 Total"), pch=1) +  
+  geom_line(data = . %>% 
+              select(il18bp_pM, il18free_pM,  il18tot_pM) %>% 
+              pivot_longer(cols = -il18bp_pM, 
+                           names_to = "variable", values_to = "value"),
+            aes(x = il18bp_pM, y = value, group = il18bp_pM), col = 'grey20') +
+  scale_color_manual(values = c("IL-18 Free" = "blue", "IL-18 Total" = "red")) +
+  labs(x = "IL-18BP (pM)", y = "IL-18 (pM)", color = "") +
+  coord_cartesian(ylim = c(0, NA)) +
+  ggtitle("No rejection group, the 1st measurement")
+p18_no_reject_0
+if(file.exists('gitignore/figures/p18_no_reject_0.pdf') == FALSE){
+  ggsave("gitignore/figures/p18_no_reject_0.pdf", 
+         plot = p18_no_reject_0, width = 8, height = 5.5, units = "in")
+}
+
+## plot for D0, group with rejection
+p18_acute_reject_0 <- il18d %>% 
+  filter(group_sep == 'acute_rejection.000') %>% 
+  ggplot(aes(x = il18bp_pM)) +
+  geom_point(aes(y = il18free_pM, color = "IL-18 Free")) +  
+  geom_point(aes(y = il18tot_pM, color = "IL-18 Total"), pch=1) +  
+  geom_line(data = . %>% 
+              select(il18bp_pM, il18free_pM,  il18tot_pM) %>% 
+              pivot_longer(cols = -il18bp_pM, 
+                           names_to = "variable", values_to = "value"),
+            aes(x = il18bp_pM, y = value, group = il18bp_pM), col = 'grey20') +
+  scale_color_manual(values = c("IL-18 Free" = "blue", "IL-18 Total" = "red")) +
+  labs(x = "IL-18BP (pM)", y = "IL-18 (pM)", color = "") +
+  coord_cartesian(ylim = c(0, NA)) +
+  ggtitle("Acute rejection group, the 1st measurement")
+p18_acute_reject_0
+if(file.exists('gitignore/figures/p18_acute_reject_0.pdf') == FALSE){
+  ggsave("gitignore/figures/p18_acute_reject_0.pdf", 
+         plot = p18_acute_reject_0, width = 8, height = 5.5, units = "in")
+}
+```
+
+
+
+# Reproducibility
+
+````{r, collapse=TRUE}
+sessionInfo()
+```
+
