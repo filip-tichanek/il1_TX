@@ -182,11 +182,17 @@ run <- function(expr, path, reuse = TRUE) {
 ```{r}
 patient_table <- read.table('data/pat_data.txt')
 patient_table <- patient_table %>% select(-c(Patient, date_of_rejection,
-                                             bid, Dg))
+                                             bid, Dg)) %>% 
+  mutate(induction_therapy = factor(induction_therapy), # Ensure it's a factor
+         induction_therapy = fct_collapse(induction_therapy,
+                                           ATG = c("ATG", "ATG+ Infliximab", "ATG+Infliximab"),
+                                           basiliximab = "Simulect"))
+  
+    
 summary(patient_table)
 
 data_long <- read.table('data/long_data.txt')
-data_long <- data_long%>% select(-Patient)
+data_long <- data_long %>% select(-Patient)
 summary(data_long)
 ```
 
@@ -196,6 +202,8 @@ summary(data_long)
 Summary table for all relevant variables
 
 ## Healthy included
+
+### Continuous variables with median and quartiles
 
 ```{r, collapse=TRUE, warning=FALSE, message=FALSE}
 sumtab1 <- run(
@@ -211,7 +219,28 @@ sumtab1 <- run(
 sumtab1
 ```
 
+### Creatinine and EGFR median and range
+
+```{r, collapse=TRUE, warning=FALSE, message=FALSE}
+sumtab1b <- run(
+ patient_table %>% select(-id, -rejection_afterTX) %>% 
+  tbl_summary( by='group',
+               type = list(hemodialysis_years ~ 'continuous',
+                           N_mismatch ~ 'continuous',
+                           all_continuous()  ~ "continuous2"),
+              statistic = list(all_continuous() ~ c(
+                "{median} ({min}, {max})")))  %>%
+  modify_caption('Subjects characteristics according to group (healthy vs. with acute rejection vs. no acute rejection') %>% 
+   add_p(),
+ path = 'gitignore/run/sumtab1b', reuse=TRUE)
+
+sumtab1b
+```
+
+
 ## TX patients only
+
+### Meidian + IQR
 ```{r, collapse=TRUE, warning=FALSE, message=FALSE}
 sumtab2 <- run(
  patient_table %>% select(-id, -rejection_afterTX) %>% 
@@ -223,9 +252,29 @@ sumtab2 <- run(
                ) %>%
   modify_caption('Patient characteristics according to developed acute rejection') %>% 
    add_p(),
- path = 'gitignore/run/sumtab2', reuse=TRUE)
+ path = 'gitignore/run/sumtab2', reuse=FALSE)
 
 sumtab2
+```
+
+
+### Median + range
+```{r, collapse=TRUE, warning=FALSE, message=FALSE}
+sumtab2b <- run(
+ patient_table %>% select(-id, -rejection_afterTX) %>% 
+   filter(group != 'healthy') %>% 
+   mutate(group = factor(group)) %>% 
+  tbl_summary( by='group',
+               type = list(hemodialysis_years ~ 'continuous',
+                           N_mismatch ~ 'continuous',
+                           all_continuous()  ~ "continuous2"),
+              statistic = list(all_continuous() ~ c(
+                "{median} ({min}, {max})")))  %>%
+  modify_caption('Patient characteristics according to developed acute rejection') %>% 
+   add_p(),
+ path = 'gitignore/run/sumtab2b', reuse=TRUE)
+
+sumtab2b
 ```
 
 ## Summary table for continuous variables
@@ -244,10 +293,19 @@ sumtab <- patient_table %>%
                         IQR = ~IQR(., na.rm = TRUE), 
                         Q25 = ~quantile(., 0.25, na.rm = TRUE), 
                         Q75 = ~quantile(., 0.75, na.rm = TRUE),
+                        Q95 = ~quantile(., 0.95, na.rm = TRUE),
                         sd = ~sd(., na.rm = TRUE)), 
                    .names = "{.col}_{.fn}")) 
 kableExtra::kable(t(sumtab)) 
 ```
+
+# Patients with exceptional values of IL18 forms
+```{r}
+data_long %>% arrange(il18_value) %>% slice_head(n=10)
+data_long %>% arrange(il18_free) %>% slice_head(n=10)
+data_long %>% arrange(il18_bp_value) %>% slice_head(n=10)
+```
+
 
 
 # Cytokine levels changes over time and across groups
@@ -1360,7 +1418,7 @@ pair_rest <- pair_table %>%
   mutate(star = if_else(p<0.001, '***', star)) %>%        
   data.frame()
 ```
-! Healthy group does not differ from others with p<0.001, but some only p<0.05 
+
 
 ### Visualization
 ```{r, warning=FALSE, fig.height=5.6, fig.width=7.5}
@@ -2265,8 +2323,7 @@ Anova(model_il1a_value_adjEGFR, type=2, test.statistic='F')
 summary(model_il1a_value_adjEGFR)
 
 ## creatinine
-model_il1a_value_adjCRE <-  lmer(log10(il1_a_value) ~ log10(creatinine) +
-                       group_sep +
+model_il1a_value_adjCRE <-  lmer(log10(il1_a_value) ~ log10(creatinine) + group_sep +
                        (1|id), data = model_data, REML = TRUE)
 
 Anova(model_il1a_value_adjCRE, type=2, test.statistic='F')
@@ -2367,7 +2424,10 @@ data_long <- data_long %>%
 ```
 
 
+
 Now, we can create plots to demonstrate the relationship between IL-18BP levels and IL-18 levels (both free and total). We will concentrate on healthy individuals and the initial measurement from the group without rejection, noted for its significant variability in IL-18BP and IL-18 levels. The plots will display examples showcasing both minimal and very high IL-18 binding.
+
+## Individual plots per selected groups
 
 ```{r, fig.height=6, fig.width=7}
 ## prepare data
@@ -2445,9 +2505,562 @@ if(file.exists('gitignore/figures/p18_acute_reject_0.pdf') == FALSE){
   ggsave("gitignore/figures/p18_acute_reject_0.pdf", 
          plot = p18_acute_reject_0, width = 8, height = 5.5, units = "in")
 }
+
+
+## plot for D90, group without rejection
+p18_no_reject_90 <- il18d %>% 
+  filter(group_sep == 'no_rejection.090') %>% 
+  ggplot(aes(x = il18bp_pM)) +
+  geom_point(aes(y = il18free_pM, color = "IL-18 Free")) +  
+  geom_point(aes(y = il18tot_pM, color = "IL-18 Total"), pch=1) +  
+  geom_line(data = . %>% 
+              select(il18bp_pM, il18free_pM,  il18tot_pM) %>% 
+              pivot_longer(cols = -il18bp_pM, 
+                           names_to = "variable", values_to = "value"),
+            aes(x = il18bp_pM, y = value, group = il18bp_pM), col = 'grey20') +
+  scale_color_manual(values = c("IL-18 Free" = "blue", "IL-18 Total" = "red")) +
+  labs(x = "IL-18BP (pM)", y = "IL-18 (pM)", color = "") +
+  coord_cartesian(ylim = c(0, NA)) +
+  ggtitle("No rejection group, day 90")
+p18_no_reject_90
+if(file.exists('gitignore/figures/p18_no_reject_90.pdf') == FALSE){
+  ggsave("gitignore/figures/p18_no_reject_90.pdf", 
+         plot = p18_no_reject_90, width = 8, height = 5.5, units = "in")
+}
+
+## plot for biopsy measurement, rejection group
+p18_acute_reject_biopsy <- il18d %>% 
+  filter(group_sep == 'acute_rejection.biopsy') %>% 
+  ggplot(aes(x = il18bp_pM)) +
+  geom_point(aes(y = il18free_pM, color = "IL-18 Free")) +  
+  geom_point(aes(y = il18tot_pM, color = "IL-18 Total"), pch=1) +  
+  geom_line(data = . %>% 
+              select(il18bp_pM, il18free_pM,  il18tot_pM) %>% 
+              pivot_longer(cols = -il18bp_pM, 
+                           names_to = "variable", values_to = "value"),
+            aes(x = il18bp_pM, y = value, group = il18bp_pM), col = 'grey20') +
+  scale_color_manual(values = c("IL-18 Free" = "blue", "IL-18 Total" = "red")) +
+  labs(x = "IL-18BP (pM)", y = "IL-18 (pM)", color = "") +
+  coord_cartesian(ylim = c(0, NA)) +
+  ggtitle("Rejection group, day of biopsy")
+p18_acute_reject_biopsy
+if(file.exists('gitignore/figures/p18_acute_reject_biopsy.pdf') == FALSE){
+  ggsave("gitignore/figures/p18_acute_reject_biopsy.pdf", 
+         plot = p18_acute_reject_biopsy, width = 8, height = 5.5, units = "in")
+}
+```
+
+## acute/no rejection difference
+
+```{r, fig.height=8, fig.width=8}
+il18d <- il18d %>% 
+  mutate(free_ratio = il18free_pM/il18tot_pM)
+
+
+ymax = 580
+xmax = 500
+xmin = 0
+
+
+p1 <- il18d %>% 
+  filter(group_sep == 'no_rejection.090') %>% 
+  ggplot(aes(x = il18bp_pM)) +
+  geom_point(aes(y = il18free_pM, color = "IL-18 Free")) +  
+  geom_point(aes(y = il18tot_pM, color = "IL-18 Total"), pch=1) +  
+  geom_line(data = . %>% 
+              select(il18bp_pM, il18free_pM,  il18tot_pM) %>% 
+              pivot_longer(cols = -il18bp_pM, 
+                           names_to = "variable", values_to = "value"),
+            aes(x = il18bp_pM, y = value, group = il18bp_pM), col = 'grey20') +
+  scale_color_manual(values = c("IL-18 Free" = "blue", "IL-18 Total" = "red")) +
+  labs(x = "IL-18BP (pM)", y = "IL-18 (pM)", color = "") +
+  coord_cartesian(xlim = c(xmin, xmax), ylim = c(0, ymax)) +
+  ggtitle("No rejection, day 90") + 
+  theme(legend.position = 'none')
+
+p2 <- il18d %>% 
+  filter(group_sep == 'acute_rejection.biopsy') %>% 
+  ggplot(aes(x = il18bp_pM)) +
+  geom_point(aes(y = il18free_pM, color = "IL-18 Free")) +  
+  geom_point(aes(y = il18tot_pM, color = "IL-18 Total"), pch=1) +  
+  geom_line(data = . %>% 
+              select(il18bp_pM, il18free_pM,  il18tot_pM) %>% 
+              pivot_longer(cols = -il18bp_pM, 
+                           names_to = "variable", values_to = "value"),
+            aes(x = il18bp_pM, y = value, group = il18bp_pM), col = 'grey20') +
+  scale_color_manual(values = c("IL-18 Free" = "blue", "IL-18 Total" = "red")) +
+  labs(x = "IL-18BP (pM)", y = "IL-18 (pM)", color = "") +
+  coord_cartesian(xlim = c(xmin, xmax), ylim = c(0, ymax)) +
+  ggtitle("Rejection, day of biopsy")+
+  theme(legend.position = c(0.85, 0.9))
+
+
+
+p3 <- il18d %>% 
+  filter(group_sep == 'no_rejection.000') %>% 
+  ggplot(aes(x = il18bp_pM)) +
+  geom_point(aes(y = il18free_pM, color = "IL-18 Free")) +  
+  geom_point(aes(y = il18tot_pM, color = "IL-18 Total"), pch=1) +  
+  geom_line(data = . %>% 
+              select(il18bp_pM, il18free_pM,  il18tot_pM) %>% 
+              pivot_longer(cols = -il18bp_pM, 
+                           names_to = "variable", values_to = "value"),
+            aes(x = il18bp_pM, y = value, group = il18bp_pM), col = 'grey20') +
+  scale_color_manual(values = c("IL-18 Free" = "blue", "IL-18 Total" = "red")) +
+  labs(x = "IL-18BP (pM)", y = "IL-18 (pM)", color = "") +
+  coord_cartesian(xlim = c(xmin, xmax), ylim = c(0, ymax)) +
+  ggtitle("No rejection, before TX") + 
+  theme(legend.position = 'none')
+
+p4 <- il18d %>% 
+  filter(group_sep == 'acute_rejection.000') %>% 
+  ggplot(aes(x = il18bp_pM)) +
+  geom_point(aes(y = il18free_pM, color = "IL-18 Free")) +  
+  geom_point(aes(y = il18tot_pM, color = "IL-18 Total"), pch=1) +  
+  geom_line(data = . %>% 
+              select(il18bp_pM, il18free_pM,  il18tot_pM) %>% 
+              pivot_longer(cols = -il18bp_pM, 
+                           names_to = "variable", values_to = "value"),
+            aes(x = il18bp_pM, y = value, group = il18bp_pM), col = 'grey20') +
+  scale_color_manual(values = c("IL-18 Free" = "blue", "IL-18 Total" = "red")) +
+  labs(x = "IL-18BP (pM)", y = "IL-18 (pM)", color = "") +
+  coord_cartesian(xlim = c(xmin, xmax), ylim = c(0, ymax)) +
+  ggtitle("Rejection, before TX")+
+  theme(legend.position = 'none')
+
+
+fig12 <- plot_grid(p3, p4, p1, p2)
+if(file.exists('gitignore/figures/fig12.pdf') == FALSE){
+  ggsave("gitignore/figures/fig12.pdf", 
+         plot = fig12, width = 8, height = 8, units = "in")
+}
+
+fig12
+```
+
+# Prediction of rejection with D90 data
+
+## Data preparation
+
+```{r}
+wdat <- data_long %>% 
+  filter(group_sep == 'no_rejection.090' |
+           group_sep == 'acute_rejection.biopsy') %>% 
+  mutate(group = factor(group)) %>% 
+  select(-group)
+
+wpdat <- patient_table %>% 
+  select(id, donor_age, dsa, anti_hla, TX_order, group, MT_minutes, induction_therapy) %>% 
+  mutate(anti_hla = if_else(is.na(anti_hla), '0', anti_hla)) %>% 
+  mutate(anti_hla = if_else(anti_hla == 'pos', 1, 0),
+         TX_order = factor(if_else(TX_order == 1, '1', '2+')),
+         rejection = if_else(group == 'no_rejection', 0, 1))
+
+wdat <- wdat %>%
+  left_join(wpdat, by = 'id')
+
+summary(wdat)
 ```
 
 
+
+
+
+## Il18bp model
+
+```{r}
+
+wdat_sbs <- wdat %>% filter(!is.na(il18_bp_value))
+
+model <- glm(rejection ~ 
+               dsa +
+               TX_order + 
+               log2(il18_bp_value), 
+             data = wdat_sbs,
+             family = binomial(link = 'logit'))
+
+basemod <- update(model, ~ . -log2(il18_bp_value))
+AIC(model) - AIC(basemod)
+tr <- data.frame(pred_b = as.numeric(predict(basemod)),
+                 pred = as.numeric(predict(model)),
+                 reject = model$model$rejection)
+auc1 <- roc(response = tr$reject, predictor = tr$pred_b)
+auc1
+
+auc2 <- roc(response = tr$reject, predictor = tr$pred)
+auc2
+
+roc.test(auc1, auc2)
+  
+tr <- summary(model)$coefficients[-1, c(1,4)]
+colnames(tr)[1] <- 'Odds ratio'
+tr[,1] <- round(exp(tr[,1]),2)
+tr[,2] <- round(tr[,2], 4)
+kableExtra::kable(tr)
+
+
+
+model_egfr <- glm(rejection ~ 
+               egfr + 
+               dsa + 
+               #anti_hla +
+               TX_order + 
+               #induction_therapy +
+               log2(il18_bp_value), 
+             data = wdat_sbs,
+             family = binomial(link = 'logit'))
+
+basemod <- update(model_egfr, ~ . -log2(il18_bp_value))
+AIC(model_egfr) - AIC(basemod)  
+tr <- data.frame(pred_b = as.numeric(predict(basemod)),
+                 pred = as.numeric(predict(model_egfr)),
+                 reject = model_egfr$model$rejection)
+auc1 <- roc(response = tr$reject, predictor = tr$pred_b)
+auc1
+
+auc2 <- roc(response = tr$reject, predictor = tr$pred)
+auc2
+
+roc.test(auc1, auc2)
+
+
+tr <- summary(model_egfr)$coefficients[-1, c(1,4)]
+colnames(tr)[1] <- 'Odds ratio'
+tr[,1] <- round(exp(tr[,1]), 3)
+tr[,2] <- round(tr[,2], 4)
+kableExtra::kable(tr)
+
+```
+
+
+## Il-1a model
+
+```{r}
+
+wdat_sbs <- wdat %>% filter(!is.na(il1_a_value))
+
+model <- glm(rejection ~ 
+               dsa +
+               TX_order + 
+               log2(il1_a_value), 
+             data = wdat_sbs,
+             family = binomial(link = 'logit'))
+
+basemod <- update(model, ~ . -log2(il1_a_value))
+AIC(model) - AIC(basemod)
+tr <- data.frame(pred_b = as.numeric(predict(basemod)),
+                 pred = as.numeric(predict(model)),
+                 reject = model$model$rejection)
+auc1 <- roc(response = tr$reject, predictor = tr$pred_b)
+auc1
+
+auc2 <- roc(response = tr$reject, predictor = tr$pred)
+auc2
+
+roc.test(auc1, auc2)
+  
+tr <- summary(model)$coefficients[-1, c(1,4)]
+colnames(tr)[1] <- 'Odds ratio'
+tr[,1] <- round(exp(tr[,1]),2)
+tr[,2] <- round(tr[,2], 4)
+kableExtra::kable(tr)
+
+
+
+model_egfr <- glm(rejection ~ 
+               egfr + 
+               dsa + 
+               #anti_hla +
+               TX_order + 
+               #induction_therapy +
+               log2(il1_a_value), 
+             data = wdat_sbs,
+             family = binomial(link = 'logit'))
+
+basemod <- update(model_egfr, ~ . -log2(il1_a_value))
+AIC(model_egfr) - AIC(basemod)  
+tr <- data.frame(pred_b = as.numeric(predict(basemod)),
+                 pred = as.numeric(predict(model_egfr)),
+                 reject = model_egfr$model$rejection)
+auc1 <- roc(response = tr$reject, predictor = tr$pred_b)
+auc1
+
+auc2 <- roc(response = tr$reject, predictor = tr$pred)
+auc2
+
+roc.test(auc1, auc2)
+
+
+tr <- summary(model_egfr)$coefficients[-1, c(1,4)]
+colnames(tr)[1] <- 'Odds ratio'
+tr[,1] <- round(exp(tr[,1]), 3)
+tr[,2] <- round(tr[,2], 4)
+kableExtra::kable(tr)
+
+```
+
+## Il-1b model
+
+```{r}
+
+wdat_sbs <- wdat %>% filter(!is.na(il1_b_value))
+
+model <- glm(rejection ~ 
+               dsa +
+               TX_order + 
+               log2(il1_b_value), 
+             data = wdat_sbs,
+             family = binomial(link = 'logit'))
+
+basemod <- update(model, ~ . -log2(il1_b_value))
+AIC(model) - AIC(basemod)
+tr <- data.frame(pred_b = as.numeric(predict(basemod)),
+                 pred = as.numeric(predict(model)),
+                 reject = model$model$rejection)
+auc1 <- roc(response = tr$reject, predictor = tr$pred_b)
+auc1
+
+auc2 <- roc(response = tr$reject, predictor = tr$pred)
+auc2
+
+roc.test(auc1, auc2)
+  
+tr <- summary(model)$coefficients[-1, c(1,4)]
+colnames(tr)[1] <- 'Odds ratio'
+tr[,1] <- round(exp(tr[,1]),2)
+tr[,2] <- round(tr[,2], 4)
+kableExtra::kable(tr)
+
+
+
+model_egfr <- glm(rejection ~ 
+               egfr + 
+               dsa + 
+               #anti_hla +
+               TX_order + 
+               #induction_therapy +
+               log2(il1_b_value), 
+             data = wdat_sbs,
+             family = binomial(link = 'logit'))
+
+basemod <- update(model_egfr, ~ . -log2(il1_b_value))
+AIC(model_egfr) - AIC(basemod)  
+tr <- data.frame(pred_b = as.numeric(predict(basemod)),
+                 pred = as.numeric(predict(model_egfr)),
+                 reject = model_egfr$model$rejection)
+auc1 <- roc(response = tr$reject, predictor = tr$pred_b)
+auc1
+
+auc2 <- roc(response = tr$reject, predictor = tr$pred)
+auc2
+
+roc.test(auc1, auc2)
+
+
+tr <- summary(model_egfr)$coefficients[-1, c(1,4)]
+colnames(tr)[1] <- 'Odds ratio'
+tr[,1] <- round(exp(tr[,1]), 3)
+tr[,2] <- round(tr[,2], 4)
+kableExtra::kable(tr)
+
+```
+## Il-18 total model
+
+```{r}
+
+wdat_sbs <- wdat %>% filter(!is.na(il18_value))
+
+model <- glm(rejection ~ 
+               dsa +
+               TX_order + 
+               log2(il18_value), 
+             data = wdat_sbs,
+             family = binomial(link = 'logit'))
+
+basemod <- update(model, ~ . -log2(il18_value))
+AIC(model) - AIC(basemod)
+tr <- data.frame(pred_b = as.numeric(predict(basemod)),
+                 pred = as.numeric(predict(model)),
+                 reject = model$model$rejection)
+auc1 <- roc(response = tr$reject, predictor = tr$pred_b)
+auc1
+
+auc2 <- roc(response = tr$reject, predictor = tr$pred)
+auc2
+
+roc.test(auc1, auc2)
+  
+tr <- summary(model)$coefficients[-1, c(1,4)]
+colnames(tr)[1] <- 'Odds ratio'
+tr[,1] <- round(exp(tr[,1]),2)
+tr[,2] <- round(tr[,2], 4)
+kableExtra::kable(tr)
+
+
+
+model_egfr <- glm(rejection ~ 
+               egfr + 
+               dsa + 
+               #anti_hla +
+               TX_order + 
+               #induction_therapy +
+               log2(il18_value), 
+             data = wdat_sbs,
+             family = binomial(link = 'logit'))
+
+basemod <- update(model_egfr, ~ . -log2(il18_value))
+AIC(model_egfr) - AIC(basemod)  
+tr <- data.frame(pred_b = as.numeric(predict(basemod)),
+                 pred = as.numeric(predict(model_egfr)),
+                 reject = model_egfr$model$rejection)
+auc1 <- roc(response = tr$reject, predictor = tr$pred_b)
+auc1
+
+auc2 <- roc(response = tr$reject, predictor = tr$pred)
+auc2
+
+roc.test(auc1, auc2)
+
+
+tr <- summary(model_egfr)$coefficients[-1, c(1,4)]
+colnames(tr)[1] <- 'Odds ratio'
+tr[,1] <- round(exp(tr[,1]), 3)
+tr[,2] <- round(tr[,2], 4)
+kableExtra::kable(tr)
+
+```
+
+
+## Il-18free model
+
+```{r}
+
+wdat_sbs <- wdat %>% filter(!is.na(il18_free))
+
+model <- glm(rejection ~ 
+               dsa +
+               TX_order + 
+               log2(il18_free), 
+             data = wdat_sbs,
+             family = binomial(link = 'logit'))
+
+basemod <- update(model, ~ . -log2(il18_free))
+AIC(model) - AIC(basemod)
+tr <- data.frame(pred_b = as.numeric(predict(basemod)),
+                 pred = as.numeric(predict(model)),
+                 reject = model$model$rejection)
+auc1 <- roc(response = tr$reject, predictor = tr$pred_b)
+auc1
+
+auc2 <- roc(response = tr$reject, predictor = tr$pred)
+auc2
+
+roc.test(auc1, auc2)
+  
+tr <- summary(model)$coefficients[-1, c(1,4)]
+colnames(tr)[1] <- 'Odds ratio'
+tr[,1] <- round(exp(tr[,1]),2)
+tr[,2] <- round(tr[,2], 4)
+kableExtra::kable(tr)
+
+
+
+model_egfr <- glm(rejection ~ 
+               egfr + 
+               dsa + 
+               #anti_hla +
+               TX_order + 
+               #induction_therapy +
+               log2(il18_free), 
+             data = wdat_sbs,
+             family = binomial(link = 'logit'))
+
+basemod <- update(model_egfr, ~ . -log2(il18_free))
+AIC(model_egfr) - AIC(basemod)  
+tr <- data.frame(pred_b = as.numeric(predict(basemod)),
+                 pred = as.numeric(predict(model_egfr)),
+                 reject = model_egfr$model$rejection)
+auc1 <- roc(response = tr$reject, predictor = tr$pred_b)
+auc1
+
+auc2 <- roc(response = tr$reject, predictor = tr$pred)
+auc2
+
+roc.test(auc1, auc2)
+
+
+tr <- summary(model_egfr)$coefficients[-1, c(1,4)]
+colnames(tr)[1] <- 'Odds ratio'
+tr[,1] <- round(exp(tr[,1]), 3)
+tr[,2] <- round(tr[,2], 4)
+kableExtra::kable(tr)
+```
+
+
+## Il-36b model
+
+```{r}
+
+wdat_sbs <- wdat %>% filter(!is.na(il36_b_value))
+
+model <- glm(rejection ~ 
+               dsa +
+               TX_order + 
+               log2(il36_b_value), 
+             data = wdat_sbs,
+             family = binomial(link = 'logit'))
+
+basemod <- update(model, ~ . -log2(il36_b_value))
+AIC(model) - AIC(basemod)
+tr <- data.frame(pred_b = as.numeric(predict(basemod)),
+                 pred = as.numeric(predict(model)),
+                 reject = model$model$rejection)
+auc1 <- roc(response = tr$reject, predictor = tr$pred_b)
+auc1
+
+auc2 <- roc(response = tr$reject, predictor = tr$pred)
+auc2
+
+roc.test(auc1, auc2)
+  
+tr <- summary(model)$coefficients[-1, c(1,4)]
+colnames(tr)[1] <- 'Odds ratio'
+tr[,1] <- round(exp(tr[,1]),2)
+tr[,2] <- round(tr[,2], 4)
+kableExtra::kable(tr)
+
+
+
+model_egfr <- glm(rejection ~ 
+               egfr + 
+               dsa + 
+               #anti_hla +
+               TX_order + 
+               #induction_therapy +
+               log2(il36_b_value), 
+             data = wdat_sbs,
+             family = binomial(link = 'logit'))
+
+basemod <- update(model_egfr, ~ . -log2(il36_b_value))
+AIC(model_egfr) - AIC(basemod)  
+tr <- data.frame(pred_b = as.numeric(predict(basemod)),
+                 pred = as.numeric(predict(model_egfr)),
+                 reject = model_egfr$model$rejection)
+auc1 <- roc(response = tr$reject, predictor = tr$pred_b)
+auc1
+
+auc2 <- roc(response = tr$reject, predictor = tr$pred)
+auc2
+
+roc.test(auc1, auc2)
+
+
+tr <- summary(model_egfr)$coefficients[-1, c(1,4)]
+colnames(tr)[1] <- 'Odds ratio'
+tr[,1] <- round(exp(tr[,1]), 3)
+tr[,2] <- round(tr[,2], 4)
+kableExtra::kable(tr)
+```
 
 # Reproducibility
 
