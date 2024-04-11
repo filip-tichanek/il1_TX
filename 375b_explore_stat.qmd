@@ -1,5 +1,5 @@
 ---
-title: "Changes in the serum levels of IL-1 family cytokines after kidney allograft transplantation"
+title: "Insights into IL-1 Family Cytokines in Kidney Allograft Transplantation: IL-18BP and Free IL-18 as Emerging Biomarkers"
 subtitle: "Statistical report - data exploration and statistical analysis"
 author: "Cecrdlova et al."
 format: 
@@ -69,7 +69,7 @@ body {
 
 **Authors' affiliations**: 
 
-<span style="font-size: larger;">Cecrdlova E^1^, Krupickova L^1^, Fialova M^1^, Novotny M^2^, Svachova V^1^, Mezerova K^1^, Viklicky O^2^, Tichanek ^3^, Striz I^1^ </span>
+<span style="font-size: larger;">Cecrdlova E^1^, Krupickova L^1^, Fialova M^1^, Novotny M^2^, Svachova V^1^, Mezerova K^1^, Tichanek F^3^, Viklicky O^2^, Striz I^1^ </span>
 
 
 ^1^Department of Clinical and Transplant Immunology
@@ -82,7 +82,24 @@ Institute for Clinical and Experimental Medicine, Prague, Czech Republic
  
 <br>
 
-The paper is *under review* at the [*Cytokine*](https://www.sciencedirect.com/journal/cytokine) journal 
+<br>
+
+**Original publication**
+
+This is statistical report of for the [publication](TO BE ADDED) *Insights into IL-1 Family Cytokines in Kidney Allograft Transplantation: IL-18BP and Free IL-18 as Emerging Biomarkers*, cuurently *under reveiw* in the [*Cytokine*](https://www.sciencedirect.com/journal/cytokine) journal 
+
+<br>
+
+[When using this code, cite original publication:]{style="font-size: larger;"}
+
+::: {style="background-color: #2D2D31; padding: 10px; margin: 10px 0; border-left: 3px solid #ccc;"}
+TO BE ADDED
+:::
+
+<br>
+
+
+Original GitHub repository: <https://github.com/filip-tichanek/il1_TX>
 
 
 ------------------------------------------------------------------------
@@ -252,7 +269,7 @@ sumtab2 <- run(
                ) %>%
   modify_caption('Patient characteristics according to developed acute rejection') %>% 
    add_p(),
- path = 'gitignore/run/sumtab2', reuse=FALSE)
+ path = 'gitignore/run/sumtab2', reuse=TRUE)
 
 sumtab2
 ```
@@ -550,6 +567,14 @@ plotos <- plotos + geom_segment(data = pair_rest,
 plot_il1_a <- plotos + annotate("text", x = pair_rest$anot_coord, y = pair_rest$y+0.5, 
                             label = pair_rest$star, size = 7, color=pair_rest$cole) 
 plot_il1_a
+
+plotac <- 'plot_il1_a'
+
+path = paste0('gitignore/figures/',plotac, '.eps')
+if(file.exists(path) == FALSE){
+  ggsave(path, 
+         plot = get(plotac), width = 7.5, height = 5.6, units = "in")
+}
 ```
 
 ## Il1_b
@@ -772,6 +797,14 @@ plotos <- plotos + geom_segment(data = pair_rest,
 plot_il1_b <- plotos + annotate("text", x = pair_rest$anot_coord, y = pair_rest$y+0.5, 
                             label = pair_rest$star, size = 7, color=pair_rest$cole) 
 plot_il1_b
+
+plotac <- 'plot_il1_b'
+
+path = paste0('gitignore/figures/',plotac, '.eps')
+if(file.exists(path) == FALSE){
+  ggsave(path, 
+         plot = get(plotac), width = 7.5, height = 5.6, units = "in")
+}
 ```
 
 
@@ -1000,6 +1033,14 @@ plotos <- plotos + geom_segment(data = pair_rest,
 plot_il1_ra <- plotos + annotate("text", x = pair_rest$anot_coord, y = pair_rest$y+50, 
                             label = pair_rest$star, size = 7, color=pair_rest$cole) 
 plot_il1_ra
+
+plotac <- 'plot_il1_ra'
+
+path = paste0('gitignore/figures/',plotac, '.eps')
+if(file.exists(path) == FALSE){
+  ggsave(path, 
+         plot = get(plotac), width = 7.5, height = 5.6, units = "in")
+}
 ```
 
 
@@ -1230,6 +1271,14 @@ plotos <- plotos + geom_segment(data = pair_rest,
 plot_il18 <- plotos + annotate("text", x = pair_rest$anot_coord, y = pair_rest$y+50, 
                             label = pair_rest$star, size = 7, color=pair_rest$cole) 
 plot_il18
+
+plotac <- 'plot_il18'
+
+path = paste0('gitignore/figures/',plotac, '.eps')
+if(file.exists(path) == FALSE){
+  ggsave(path, 
+         plot = get(plotac), width = 7.5, height = 5.6, units = "in")
+}
 ```
 
 
@@ -1461,6 +1510,14 @@ plotos <- plotos + geom_segment(data = pair_rest,
 plot_il18_bp <- plotos + annotate("text", x = pair_rest$anot_coord, y = pair_rest$y+50, 
                             label = pair_rest$star, size = 7, color=pair_rest$cole) 
 plot_il18_bp
+
+plotac <- 'plot_il18_bp'
+
+path = paste0('gitignore/figures/',plotac, '.eps')
+if(file.exists(path) == FALSE){
+  ggsave(path, 
+         plot = get(plotac), width = 7.5, height = 5.6, units = "in")
+}
 ```
 
 
@@ -1690,6 +1747,14 @@ plotos <- plotos + geom_segment(data = pair_rest,
 plot_il18_free <- plotos + annotate("text", x = pair_rest$anot_coord, y = pair_rest$y+5, 
                             label = pair_rest$star, size = 7, color=pair_rest$cole) 
 plot_il18_free
+
+plotac <- 'plot_il18_free'
+
+path = paste0('gitignore/figures/',plotac, '.eps')
+if(file.exists(path) == FALSE){
+  ggsave(path, 
+         plot = get(plotac), width = 7.5, height = 5.6, units = "in")
+}
 ```
 
 ## il36_b
@@ -1922,6 +1987,14 @@ plotos <- plotos + geom_segment(data = pair_rest,
 plot_il36_b <- plotos + annotate("text", x = pair_rest$anot_coord, y = pair_rest$y+0.15, 
                             label = pair_rest$star, size = 7, color=pair_rest$cole) 
 plot_il36_b
+
+plotac <- 'plot_il36_b'
+
+path = paste0('gitignore/figures/',plotac, '.eps')
+if(file.exists(path) == FALSE){
+  ggsave(path, 
+         plot = get(plotac), width = 7.5, height = 5.6, units = "in")
+}
 ```
 
 
@@ -1939,6 +2012,8 @@ cor.mtest(tr_cor, conf.level = 0.95)
 
 tr_cor <- cor(tr_cor, method='spearman', 
               use = 'pairwise.complete.obs') 
+
+
 corrplot(tr_cor, addCoef.col = 'black',tl.col = "white")
 text(1:9, 9.9, expression("eGFR", "Creatinine", "IL-1" * alpha, 
                            "IL-1" * beta, "IL-1 RA", "IL-18", "IL-18 BP",
@@ -1947,6 +2022,25 @@ text(1:9, 9.9, expression("eGFR", "Creatinine", "IL-1" * alpha,
 text(-0.1, 9:1,  expression("eGFR", "Creatinine", "IL-1" * alpha, 
                            "IL-1" * beta, "IL-1 RA", "IL-18", "IL-18 BP",
                "IL-18 (free)",  "IL-1" * beta))
+
+
+plotac <- 'cormat'
+
+path = paste0('gitignore/figures/',plotac, '.eps')
+if(file.exists(path) == FALSE){
+  postscript(path, horizontal = FALSE, onefile = FALSE, paper = "special", height = 9, width = 10)
+  corrplot(tr_cor, addCoef.col = 'black',tl.col = "white")
+  
+  text(1:9, 9.9, expression("eGFR", "Creatinine", "IL-1" * alpha, 
+                           "IL-1" * beta, "IL-1 RA", "IL-18", "IL-18 BP",
+                           "IL-18 (free)",  "IL-36" * beta))
+  text(-0.1, 9:1,  expression("eGFR", "Creatinine", "IL-1" * alpha, 
+                           "IL-1" * beta, "IL-1 RA", "IL-18", "IL-18 BP",
+                           "IL-18 (free)",  "IL-1" * beta))
+  
+  dev.off()
+}
+
 ```
 
 There is not any significant correlation between interleukins and markers of renal function. At least modest (but still not statistically significant) correlation is for interleukin-18BP.
@@ -2459,10 +2553,7 @@ p18_healthy <- il18d %>%
   coord_cartesian(ylim = c(0, NA)) +
   ggtitle("Samples from healthy donors")
 p18_healthy
-if(file.exists('gitignore/figures/p18_healthy.pdf') == FALSE){
-  ggsave("gitignore/figures/p18_healthy.pdf", 
-         plot = p18_healthy, width = 8, height = 5.5, units = "in")
-}
+
 
 ## plot for D0, group without rejection
 p18_no_reject_0 <- il18d %>% 
@@ -2480,10 +2571,6 @@ p18_no_reject_0 <- il18d %>%
   coord_cartesian(ylim = c(0, NA)) +
   ggtitle("No rejection group, the 1st measurement")
 p18_no_reject_0
-if(file.exists('gitignore/figures/p18_no_reject_0.pdf') == FALSE){
-  ggsave("gitignore/figures/p18_no_reject_0.pdf", 
-         plot = p18_no_reject_0, width = 8, height = 5.5, units = "in")
-}
 
 ## plot for D0, group with rejection
 p18_acute_reject_0 <- il18d %>% 
@@ -2500,11 +2587,7 @@ p18_acute_reject_0 <- il18d %>%
   labs(x = "IL-18BP (pM)", y = "IL-18 (pM)", color = "") +
   coord_cartesian(ylim = c(0, NA)) +
   ggtitle("Acute rejection group, the 1st measurement")
-p18_acute_reject_0
-if(file.exists('gitignore/figures/p18_acute_reject_0.pdf') == FALSE){
-  ggsave("gitignore/figures/p18_acute_reject_0.pdf", 
-         plot = p18_acute_reject_0, width = 8, height = 5.5, units = "in")
-}
+
 
 
 ## plot for D90, group without rejection
@@ -2522,11 +2605,6 @@ p18_no_reject_90 <- il18d %>%
   labs(x = "IL-18BP (pM)", y = "IL-18 (pM)", color = "") +
   coord_cartesian(ylim = c(0, NA)) +
   ggtitle("No rejection group, day 90")
-p18_no_reject_90
-if(file.exists('gitignore/figures/p18_no_reject_90.pdf') == FALSE){
-  ggsave("gitignore/figures/p18_no_reject_90.pdf", 
-         plot = p18_no_reject_90, width = 8, height = 5.5, units = "in")
-}
 
 ## plot for biopsy measurement, rejection group
 p18_acute_reject_biopsy <- il18d %>% 
@@ -2543,11 +2621,10 @@ p18_acute_reject_biopsy <- il18d %>%
   labs(x = "IL-18BP (pM)", y = "IL-18 (pM)", color = "") +
   coord_cartesian(ylim = c(0, NA)) +
   ggtitle("Rejection group, day of biopsy")
+
 p18_acute_reject_biopsy
-if(file.exists('gitignore/figures/p18_acute_reject_biopsy.pdf') == FALSE){
-  ggsave("gitignore/figures/p18_acute_reject_biopsy.pdf", 
-         plot = p18_acute_reject_biopsy, width = 8, height = 5.5, units = "in")
-}
+
+
 ```
 
 ## acute/no rejection difference
@@ -2635,6 +2712,14 @@ if(file.exists('gitignore/figures/fig12.pdf') == FALSE){
          plot = fig12, width = 8, height = 8, units = "in")
 }
 
+plotac <- 'fig12'
+
+path = paste0('gitignore/figures/',plotac, '.eps')
+if(file.exists(path) == FALSE){
+  ggsave(path, 
+         plot = get(plotac), width = 8, height = 8, units = "in")
+}
+
 fig12
 ```
 
@@ -2661,9 +2746,6 @@ wdat <- wdat %>%
 
 summary(wdat)
 ```
-
-
-
 
 
 ## Il18bp model
@@ -2766,7 +2848,6 @@ tr[,2] <- round(tr[,2], 4)
 kableExtra::kable(tr)
 
 
-
 model_egfr <- glm(rejection ~ 
                egfr + 
                dsa + 
@@ -2796,7 +2877,6 @@ colnames(tr)[1] <- 'Odds ratio'
 tr[,1] <- round(exp(tr[,1]), 3)
 tr[,2] <- round(tr[,2], 4)
 kableExtra::kable(tr)
-
 ```
 
 ## Il-1b model
