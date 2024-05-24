@@ -1,5 +1,5 @@
 # il1_TX
-This is statistical report of for the publication *Insights into IL-1 Family Cytokines in Kidney Allograft Transplantation: IL-18BP and Free IL-18 as Emerging Biomarkers*, cuurently *under reveiw* in the [*Cytokine*](https://www.sciencedirect.com/journal/cytokine) journal 
+This is statistical report of for the publication *Insights into IL-1 family cytokines in kidney allograft transplantation: IL-18BP and free IL-18 as emerging biomarkers*, cuurently *accepted* in the [*Cytokine*](https://www.sciencedirect.com/journal/cytokine) journal 
 
 See html statsitical report: https://filip-tichanek.github.io/il1_TX/
 
