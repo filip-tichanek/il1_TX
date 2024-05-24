@@ -32,9 +32,7 @@ monobackgroundcolor: "#3B3B3B"
 ---
 
 ------------------------------------------------------------------------
-```{r, collapse=TRUE, echo=FALSE, output=FALSE}
-getwd()
-```
+
 
 ```{r setup, echo=FALSE}
 knitr::opts_chunk$set(collapse = TRUE)
@@ -86,7 +84,7 @@ Institute for Clinical and Experimental Medicine, Prague, Czech Republic
 
 **Original publication**
 
-This is statistical report of for the [publication](TO BE ADDED) *Insights into IL-1 Family Cytokines in Kidney Allograft Transplantation: IL-18BP and Free IL-18 as Emerging Biomarkers*, cuurently *under reveiw* in the [*Cytokine*](https://www.sciencedirect.com/journal/cytokine) journal 
+This is statistical report of for the [publication](TO BE ADDED) *Insights into IL-1 family cytokines in kidney allograft transplantation: IL-18BP and free IL-18 as emerging biomarkers*, cuurently *accepted* in the [*Cytokine*](https://www.sciencedirect.com/journal/cytokine) journal 
 
 <br>
 
@@ -139,8 +137,6 @@ if (T) {
     library(coxed)
     library(quantreg)
     library(rstudioapi)
-    library(effects)
-    library(lqmm)
     
     # Functions clashes
     select <- dplyr::select
@@ -161,7 +157,7 @@ if (T) {
 
 ## `run_model` function
 
-The function to (i) load OR (ii) run & save (if has not been done previously) results of any computation or complex table production
+The function to (i) load OR (ii) run & save (if has not been done previously) results of any computation
 
 ```{r, collapse=TRUE}
 run <- function(expr, path, reuse = TRUE) {
@@ -259,6 +255,7 @@ sumtab1b
 
 ### Meidian + IQR
 ```{r, collapse=TRUE, warning=FALSE, message=FALSE}
+
 sumtab2 <- run(
  patient_table %>% select(-id, -rejection_afterTX) %>% 
    filter(group != 'healthy') %>% 
@@ -570,7 +567,7 @@ plot_il1_a
 
 plotac <- 'plot_il1_a'
 
-path = paste0('gitignore/figures/',plotac, '.eps')
+path = paste0('gitignore/figures/',plotac, '.pdf')
 if(file.exists(path) == FALSE){
   ggsave(path, 
          plot = get(plotac), width = 7.5, height = 5.6, units = "in")
@@ -800,7 +797,7 @@ plot_il1_b
 
 plotac <- 'plot_il1_b'
 
-path = paste0('gitignore/figures/',plotac, '.eps')
+path = paste0('gitignore/figures/',plotac, '.pdf')
 if(file.exists(path) == FALSE){
   ggsave(path, 
          plot = get(plotac), width = 7.5, height = 5.6, units = "in")
@@ -1036,7 +1033,7 @@ plot_il1_ra
 
 plotac <- 'plot_il1_ra'
 
-path = paste0('gitignore/figures/',plotac, '.eps')
+path = paste0('gitignore/figures/',plotac, '.pdf')
 if(file.exists(path) == FALSE){
   ggsave(path, 
          plot = get(plotac), width = 7.5, height = 5.6, units = "in")
@@ -1274,7 +1271,7 @@ plot_il18
 
 plotac <- 'plot_il18'
 
-path = paste0('gitignore/figures/',plotac, '.eps')
+path = paste0('gitignore/figures/',plotac, '.pdf')
 if(file.exists(path) == FALSE){
   ggsave(path, 
          plot = get(plotac), width = 7.5, height = 5.6, units = "in")
@@ -1513,7 +1510,7 @@ plot_il18_bp
 
 plotac <- 'plot_il18_bp'
 
-path = paste0('gitignore/figures/',plotac, '.eps')
+path = paste0('gitignore/figures/',plotac, '.pdf')
 if(file.exists(path) == FALSE){
   ggsave(path, 
          plot = get(plotac), width = 7.5, height = 5.6, units = "in")
@@ -1750,7 +1747,7 @@ plot_il18_free
 
 plotac <- 'plot_il18_free'
 
-path = paste0('gitignore/figures/',plotac, '.eps')
+path = paste0('gitignore/figures/',plotac, '.pdf')
 if(file.exists(path) == FALSE){
   ggsave(path, 
          plot = get(plotac), width = 7.5, height = 5.6, units = "in")
@@ -1990,7 +1987,7 @@ plot_il36_b
 
 plotac <- 'plot_il36_b'
 
-path = paste0('gitignore/figures/',plotac, '.eps')
+path = paste0('gitignore/figures/',plotac, '.pdf')
 if(file.exists(path) == FALSE){
   ggsave(path, 
          plot = get(plotac), width = 7.5, height = 5.6, units = "in")
@@ -2002,6 +1999,7 @@ if(file.exists(path) == FALSE){
 # Correlation of ILs and renal function markers
 
 ## Simple correlation matrix based on patient data
+
 ```{r, fig.height=9, fig.width=10}
 tr_cor <- patient_table %>%
    filter(group != 'healthy') %>% 
@@ -2026,9 +2024,10 @@ text(-0.1, 9:1,  expression("eGFR", "Creatinine", "IL-1" * alpha,
 
 plotac <- 'cormat'
 
-path = paste0('gitignore/figures/',plotac, '.eps')
+path = paste0('gitignore/figures/',plotac, '.pdf')
 if(file.exists(path) == FALSE){
-  postscript(path, horizontal = FALSE, onefile = FALSE, paper = "special", height = 9, width = 10)
+  pdf(path, height = 9, width = 10)
+  
   corrplot(tr_cor, addCoef.col = 'black',tl.col = "white")
   
   text(1:9, 9.9, expression("eGFR", "Creatinine", "IL-1" * alpha, 
@@ -2048,12 +2047,13 @@ There is not any significant correlation between interleukins and markers of ren
 ## Adjsuting IL-18BP model for renal function
 To further validate that renal functions does not play an important role for above-shown findings, we will re-fit mixed-effects model adjusting also for the effect of renal function. We will do it only for IL-18BP where modest correlation between average values of renal markers and IL-18BP levels was found.
 
+
 ### Adjustment for EGFR
 ```{r}
 model_data <- data_long %>% 
   filter(!is.na(il18_bp_value))
 
-## Complex models (incuding healthy and biopsy data)
+## Complex models (including biopsy data)
 model_il18_bp <-  lmer(log10(il18_bp_value) ~ 
                        group_sep +
                        (1|id), data = model_data, REML = FALSE)
@@ -2096,7 +2096,8 @@ AIC(model_il18_bp, model_il18_bp_adjEGFR)
 BIC(model_il18_bp, model_il18_bp_adjEGFR)
 
 ```
-Inclusion of EGFR improves the fit noticeably
+
+Inclusion of EGFR improves the fit slightly
 
 ### Adjustment for creatinine
 ```{r}
@@ -2111,7 +2112,7 @@ model_il18_bp <-  lmer(log10(il18_bp_value) ~
                        group_sep +
                        (1|id), data = model_data, REML = FALSE)
 
-model_il18_bp_adjCRE <-  lmer(log2(il18_bp_value) ~ log2(creatinine) +
+model_il18_bp_adjCRE <-  lmer(log10(il18_bp_value) ~ log2(creatinine) +
                        group_sep +
                        (1|id), data = model_data, REML = FALSE)
 
@@ -2154,7 +2155,7 @@ The analysis shows that when renal function are accounted for (included as a cov
 
 ## Adjusted free IL-18 model
 
-Given that IL-18BP is affected with renal function, and the IL18-BP affects level of other forms of IL-18 (including free IL-18), we will fit model explaining the IL-18 levels but simultaneously adjusting for renal functions
+Given that IL-18BP is seemingly affected with renal function, and the IL18-BP affects level of other forms of IL-18 (including free IL-18), we will fit model explaining the IL-18 levels but simultaneously adjusting for renal functions
 
 ### Adjustment for EGFR
 ```{r}
@@ -2436,6 +2437,7 @@ model_il1a_value_adjEGFR_simple <-  lmer(log10(il1_a_value) ~ log10(egfr) +
 Anova(model_il1a_value_adjEGFR_simple , type=2, test.statistic='F')
 summary(model_il1a_value_adjEGFR_simple)
 ```
+
 There is sign that renal function affect also IL-1b, but it seems to be driven mainly by the difference of healthy subject. Analysis taking into account only planned measurements from patients does not show any indication that renal function affects the IL-1b levels. 
 
 
@@ -2714,7 +2716,7 @@ if(file.exists('gitignore/figures/fig12.pdf') == FALSE){
 
 plotac <- 'fig12'
 
-path = paste0('gitignore/figures/',plotac, '.eps')
+path = paste0('gitignore/figures/',plotac, '.pdf')
 if(file.exists(path) == FALSE){
   ggsave(path, 
          plot = get(plotac), width = 8, height = 8, units = "in")
@@ -2851,9 +2853,7 @@ kableExtra::kable(tr)
 model_egfr <- glm(rejection ~ 
                egfr + 
                dsa + 
-               #anti_hla +
                TX_order + 
-               #induction_therapy +
                log2(il1_a_value), 
              data = wdat_sbs,
              family = binomial(link = 'logit'))
@@ -2916,9 +2916,7 @@ kableExtra::kable(tr)
 model_egfr <- glm(rejection ~ 
                egfr + 
                dsa + 
-               #anti_hla +
                TX_order + 
-               #induction_therapy +
                log2(il1_b_value), 
              data = wdat_sbs,
              family = binomial(link = 'logit'))
@@ -2942,7 +2940,6 @@ colnames(tr)[1] <- 'Odds ratio'
 tr[,1] <- round(exp(tr[,1]), 3)
 tr[,2] <- round(tr[,2], 4)
 kableExtra::kable(tr)
-
 ```
 ## Il-18 total model
 
@@ -2981,9 +2978,7 @@ kableExtra::kable(tr)
 model_egfr <- glm(rejection ~ 
                egfr + 
                dsa + 
-               #anti_hla +
                TX_order + 
-               #induction_therapy +
                log2(il18_value), 
              data = wdat_sbs,
              family = binomial(link = 'logit'))
@@ -3048,9 +3043,7 @@ kableExtra::kable(tr)
 model_egfr <- glm(rejection ~ 
                egfr + 
                dsa + 
-               #anti_hla +
                TX_order + 
-               #induction_therapy +
                log2(il18_free), 
              data = wdat_sbs,
              family = binomial(link = 'logit'))
@@ -3114,9 +3107,7 @@ kableExtra::kable(tr)
 model_egfr <- glm(rejection ~ 
                egfr + 
                dsa + 
-               #anti_hla +
                TX_order + 
-               #induction_therapy +
                log2(il36_b_value), 
              data = wdat_sbs,
              family = binomial(link = 'logit'))
@@ -3144,7 +3135,6 @@ kableExtra::kable(tr)
 
 # Reproducibility
 
-````{r, collapse=TRUE}
+```{r}
 sessionInfo()
 ```
-
