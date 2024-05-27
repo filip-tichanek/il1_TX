@@ -29,15 +29,14 @@ fontsize: 12 px
 code-block-bg: "#2D2D31"
 fontcolor: "#F5F5F5"
 monobackgroundcolor: "#3B3B3B"
+bibliography: references.bib
 ---
 
-------------------------------------------------------------------------
-
+----------------------------------------------------------------------------------------------------
 
 ```{r setup, echo=FALSE}
 knitr::opts_chunk$set(collapse = TRUE)
 ```
-
 
 ```{css, echo=FALSE}
 code.sourceCode {
@@ -62,13 +61,12 @@ body {
 
 ```
 
-------------------------------------------------------------------------
+----------------------------------------------------------------------------------------------------
 
+**Authors' affiliations**:
 
-**Authors' affiliations**: 
-
-<span style="font-size: larger;">Cecrdlova E^1^, Krupickova L^1^, Fialova M^1^, Novotny M^2^, Svachova V^1^, Mezerova K^1^, Tichanek F^3^, Viklicky O^2^, Striz I^1^ </span>
-
+[Cecrdlova E^1^, Krupickova L^1^, Fialova M^1^, Novotny M^2^, Svachova V^1^, Mezerova K^1^, Tichanek
+F^3^, Viklicky O^2^, Striz I^1^ ]{style="font-size: larger;"}
 
 ^1^Department of Clinical and Transplant Immunology
 
@@ -77,32 +75,32 @@ body {
 ^3^Department of Data Science
 
 Institute for Clinical and Experimental Medicine, Prague, Czech Republic
- 
-<br>
 
 <br>
 
 **Original publication**
 
-This is statistical report of for the [publication](TO BE ADDED) *Insights into IL-1 family cytokines in kidney allograft transplantation: IL-18BP and free IL-18 as emerging biomarkers*, cuurently *accepted* in the [*Cytokine*](https://www.sciencedirect.com/journal/cytokine) journal 
+This is statistical report of for the [publication](https://doi.org/10.1016/j.cyto.2024.156660)
+*Insights into IL-1 family cytokines in kidney allograft transplantation: IL-18BP and free IL-18 as
+emerging biomarkers* [@cecrdlova2024], published in the
+[*Cytokine*](https://www.sciencedirect.com/journal/cytokine) journal
 
 <br>
 
 [When using this code, cite original publication:]{style="font-size: larger;"}
 
 ::: {style="background-color: #2D2D31; padding: 10px; margin: 10px 0; border-left: 3px solid #ccc;"}
-TO BE ADDED
+Cecrdlova, E., L. Krupickova, M. Fialova, M. Novotny, F. Tichanek, V. Svachova, K. Mezerova, O.
+Viklicky, and I. Striz. 2024. \"Insights into IL-1 Family Cytokines in Kidney Allograft
+Transplantation: IL-18BP and Free IL-18 as Emerging Biomarkers.\" *Cytokine* 180 (August): 156660.
+<https://doi.org/10.1016/j.cyto.2024.156660>.
 :::
 
 <br>
 
-
 Original GitHub repository: <https://github.com/filip-tichanek/il1_TX>
 
-
-------------------------------------------------------------------------
-
-
+----------------------------------------------------------------------------------------------------
 
 # Packages and functions
 
@@ -153,11 +151,10 @@ if (T) {
 }
 ```
 
-
-
 ## `run_model` function
 
-The function to (i) load OR (ii) run & save (if has not been done previously) results of any computation
+The function to (i) load OR (ii) run & save (if has not been done previously) results of any
+computation
 
 ```{r, collapse=TRUE}
 run <- function(expr, path, reuse = TRUE) {
@@ -188,8 +185,6 @@ run <- function(expr, path, reuse = TRUE) {
 }
 ```
 
-
-
 ## Data upload
 
 ```{r}
@@ -209,8 +204,7 @@ data_long <- data_long %>% select(-Patient)
 summary(data_long)
 ```
 
-
-# Summary statistics 
+# Summary statistics
 
 Summary table for all relevant variables
 
@@ -250,10 +244,10 @@ sumtab1b <- run(
 sumtab1b
 ```
 
-
 ## TX patients only
 
 ### Meidian + IQR
+
 ```{r, collapse=TRUE, warning=FALSE, message=FALSE}
 
 sumtab2 <- run(
@@ -271,8 +265,8 @@ sumtab2 <- run(
 sumtab2
 ```
 
-
 ### Median + range
+
 ```{r, collapse=TRUE, warning=FALSE, message=FALSE}
 sumtab2b <- run(
  patient_table %>% select(-id, -rejection_afterTX) %>% 
@@ -314,17 +308,18 @@ kableExtra::kable(t(sumtab))
 ```
 
 # Patients with exceptional values of IL18 forms
+
 ```{r}
 data_long %>% arrange(il18_value) %>% slice_head(n=10)
 data_long %>% arrange(il18_free) %>% slice_head(n=10)
 data_long %>% arrange(il18_bp_value) %>% slice_head(n=10)
 ```
 
-
-
 # Cytokine levels changes over time and across groups
 
-Creating a new variable, `group_sep`, that combines `group` and `time_point` into a single variable. Re-defining `group` and `time_point` to be factors
+Creating a new variable, `group_sep`, that combines `group` and `time_point` into a single variable.
+Re-defining `group` and `time_point` to be factors
+
 ```{r}
 data_long <- data_long %>% 
   mutate(group_sep = factor(interaction(group, time_point)),
@@ -338,6 +333,7 @@ data_long <- data_long %>%
 ## Il1_a
 
 ### Mixed model
+
 ```{r, collapse=TRUE}
 
 ## filtering data
@@ -359,10 +355,7 @@ Anova(model_il1_a, type=2, test.statistic='F')
 summary(model_il1_a)
 ```
 
-
 ### Pairwise comparison
-
-
 
 #### List of contrasts
 
@@ -456,7 +449,6 @@ pair_table <- pair_table %>%
   pair_table$p <- NA
 ```
 
-
 #### Between-subjects comparisons
 
 ```{r, warning=FALSE}
@@ -475,8 +467,8 @@ for (i in 1:17){
 
 ```
 
-
 #### Within-subject comparisons
+
 ```{r, warning=FALSE}
 set.seed(16)
 for (i in 18:33){
@@ -498,8 +490,8 @@ pair_table$cole <- c(rep("black", 15), rep("blue3", 3), rep("red4", 3))
 pair_table$fdr <- p.adjust(pair_table$p, method = 'BH')
 ```
 
-
 #### Resulting table
+
 ```{r}
 ## the whole `pair table`
 pair_table
@@ -524,6 +516,7 @@ pair_rest <- pair_table %>%
 ```
 
 ### Visualization
+
 ```{r, warning=FALSE, fig.height=5.6, fig.width=7.5}
 
 ## plot
@@ -577,6 +570,7 @@ if(file.exists(path) == FALSE){
 ## Il1_b
 
 ### Mixed model
+
 ```{r, collapse=TRUE}
 
 ## filtering data
@@ -597,7 +591,6 @@ Anova(model_il1_b, type=2, test.statistic='F')
 ## model summary
 summary(model_il1_b)
 ```
-
 
 ### Pairwise comparison
 
@@ -692,7 +685,6 @@ pair_table <- pair_table %>%
   pair_table$p <- NA
 ```
 
-
 #### Between-subjects comparisons
 
 ```{r, warning=FALSE}
@@ -711,8 +703,8 @@ for (i in 1:17){
 
 ```
 
-
 #### Within-subject comparisons
+
 ```{r, warning=FALSE}
 set.seed(16)
 for (i in 18:33){
@@ -735,8 +727,8 @@ pair_table$cole <- c(rep("black", 15), rep("blue3", 3), rep("red4", 3))
 pair_table$fdr <- p.adjust(pair_table$p, method = 'BH')
 ```
 
-
 #### Resulting table
+
 ```{r}
 ## the whole `pair table`
 pair_table
@@ -754,6 +746,7 @@ pair_rest <- pair_table %>%
 ```
 
 ### Visualization
+
 ```{r, warning=FALSE, fig.height=5.6, fig.width=7.5}
 
 ## plot
@@ -804,10 +797,10 @@ if(file.exists(path) == FALSE){
 }
 ```
 
-
 ## il1_ra
 
 ### Mixed model
+
 ```{r, collapse=TRUE}
 
 ## filtering data
@@ -828,7 +821,6 @@ Anova(model_il1_ra, type=2, test.statistic='F')
 ## model summary
 summary(model_il1_ra)
 ```
-
 
 ### Pairwise comparison
 
@@ -923,7 +915,6 @@ pair_table <- pair_table %>%
   pair_table$p <- NA
 ```
 
-
 #### Between-subjects comparisons
 
 ```{r, warning=FALSE}
@@ -942,8 +933,8 @@ for (i in 1:17){
 
 ```
 
-
 #### Within-subject comparisons
+
 ```{r, warning=FALSE}
 set.seed(16)
 for (i in 18:33){
@@ -965,8 +956,8 @@ pair_table$cole <- c(rep("black", 15), rep("blue3", 3), rep("red4", 3))
 pair_table$fdr <- p.adjust(pair_table$p, method = 'BH')
 ```
 
-
 #### Resulting table
+
 ```{r}
 ## the whole `pair table`
 pair_table
@@ -990,6 +981,7 @@ pair_rest <- pair_table %>%
 ```
 
 ### Visualization
+
 ```{r, warning=FALSE, fig.height=5.6, fig.width=7.5}
 
 ## plot
@@ -1040,12 +1032,10 @@ if(file.exists(path) == FALSE){
 }
 ```
 
-
-
-
 ## il18
 
 ### Mixed model
+
 ```{r, collapse=TRUE}
 
 ## filtering data
@@ -1066,7 +1056,6 @@ Anova(model_il18, type=2, test.statistic='F')
 ## model summary
 summary(model_il18)
 ```
-
 
 ### Pairwise comparison
 
@@ -1161,7 +1150,6 @@ pair_table <- pair_table %>%
   pair_table$p <- NA
 ```
 
-
 #### Between-subjects comparisons
 
 ```{r, warning=FALSE}
@@ -1180,8 +1168,8 @@ for (i in 1:17){
 
 ```
 
-
 #### Within-subject comparisons
+
 ```{r, warning=FALSE}
 set.seed(16)
 for (i in 18:33){
@@ -1203,8 +1191,8 @@ pair_table$cole <- c(rep("black", 15), rep("blue3", 3), rep("red4", 3))
 pair_table$fdr <- p.adjust(pair_table$p, method = 'BH')
 ```
 
-
 #### Resulting table
+
 ```{r}
 ## the whole `pair table`
 pair_table
@@ -1228,6 +1216,7 @@ pair_rest <- pair_table %>%
 ```
 
 ### Visualization
+
 ```{r, warning=FALSE, fig.height=5.6, fig.width=7.5}
 
 ## plot
@@ -1278,12 +1267,10 @@ if(file.exists(path) == FALSE){
 }
 ```
 
-
-
-
 ## il18_bp
 
 ### Mixed model
+
 ```{r, collapse=TRUE}
 
 ## filtering data
@@ -1304,7 +1291,6 @@ Anova(model_il18_bp, type=2, test.statistic='F')
 ## model summary
 summary(model_il18_bp)
 ```
-
 
 ### Pairwise comparison
 
@@ -1399,7 +1385,6 @@ pair_table <- pair_table %>%
   pair_table$p <- NA
 ```
 
-
 #### Between-subjects comparisons
 
 ```{r, warning=FALSE}
@@ -1418,8 +1403,8 @@ for (i in 1:17){
 
 ```
 
-
 #### Within-subject comparisons
+
 ```{r, warning=FALSE}
 set.seed(16)
 for (i in 18:33){
@@ -1441,8 +1426,8 @@ pair_table$cole <- c(rep("black", 15), rep("blue3", 3), rep("red4", 3))
 pair_table$fdr <- p.adjust(pair_table$p, method = 'BH')
 ```
 
-
 #### Resulting table
+
 ```{r}
 ## the whole `pair table`
 pair_table
@@ -1465,8 +1450,8 @@ pair_rest <- pair_table %>%
   data.frame()
 ```
 
-
 ### Visualization
+
 ```{r, warning=FALSE, fig.height=5.6, fig.width=7.5}
 
 ## plot
@@ -1517,10 +1502,10 @@ if(file.exists(path) == FALSE){
 }
 ```
 
-
 ## il18_free
 
 ### Mixed model
+
 ```{r, collapse=TRUE}
 
 ## filtering data
@@ -1541,7 +1526,6 @@ Anova(model_il18_free, type=2, test.statistic='F')
 ## model summary
 summary(model_il18_free)
 ```
-
 
 ### Pairwise comparison
 
@@ -1636,7 +1620,6 @@ pair_table <- pair_table %>%
   pair_table$p <- NA
 ```
 
-
 #### Between-subjects comparisons
 
 ```{r, warning=FALSE}
@@ -1655,8 +1638,8 @@ for (i in 1:17){
 
 ```
 
-
 #### Within-subject comparisons
+
 ```{r, warning=FALSE}
 set.seed(16)
 for (i in 18:33){
@@ -1678,8 +1661,8 @@ pair_table$cole <- c(rep("black", 15), rep("blue3", 3), rep("red4", 3))
 pair_table$fdr <- p.adjust(pair_table$p, method = 'BH')
 ```
 
-
 #### Resulting table
+
 ```{r}
 ## the whole `pair table`
 pair_table
@@ -1703,6 +1686,7 @@ pair_rest <- pair_table %>%
 ```
 
 ### Visualization
+
 ```{r, warning=FALSE, fig.height=5.6, fig.width=7.5}
 
 ## plot
@@ -1757,6 +1741,7 @@ if(file.exists(path) == FALSE){
 ## il36_b
 
 ### Mixed model
+
 ```{r, collapse=TRUE}
 
 ## filtering data
@@ -1778,10 +1763,7 @@ Anova(model_il36_b, type=2, test.statistic='F')
 summary(model_il36_b)
 ```
 
-
 ### Pairwise comparison
-
-
 
 #### List of contrasts
 
@@ -1874,7 +1856,6 @@ pair_table <- pair_table %>%
   pair_table$p <- NA
 ```
 
-
 #### Between-subjects comparisons
 
 ```{r, warning=FALSE}
@@ -1893,8 +1874,8 @@ for (i in 1:17){
 
 ```
 
-
 #### Within-subject comparisons
+
 ```{r, warning=FALSE}
 set.seed(16)
 for (i in 18:33){
@@ -1916,8 +1897,8 @@ pair_table$cole <- c(rep("black", 15), rep("blue3", 3), rep("red4", 3))
 pair_table$fdr <- p.adjust(pair_table$p, method = 'BH')
 ```
 
-
 #### Resulting table
+
 ```{r}
 ## the whole `pair table`
 pair_table
@@ -1943,6 +1924,7 @@ pair_rest <- pair_table %>%
 Healthy does differ from all but acute rejection during biopsy and D365
 
 ### Visualization
+
 ```{r, warning=FALSE, fig.height=5.6, fig.width=7.5}
 
 ## plot
@@ -1994,8 +1976,6 @@ if(file.exists(path) == FALSE){
 }
 ```
 
-
-
 # Correlation of ILs and renal function markers
 
 ## Simple correlation matrix based on patient data
@@ -2042,13 +2022,18 @@ if(file.exists(path) == FALSE){
 
 ```
 
-There is not any significant correlation between interleukins and markers of renal function. At least modest (but still not statistically significant) correlation is for interleukin-18BP.
+There is not any significant correlation between interleukins and markers of renal function. At
+least modest (but still not statistically significant) correlation is for interleukin-18BP.
 
 ## Adjsuting IL-18BP model for renal function
-To further validate that renal functions does not play an important role for above-shown findings, we will re-fit mixed-effects model adjusting also for the effect of renal function. We will do it only for IL-18BP where modest correlation between average values of renal markers and IL-18BP levels was found.
 
+To further validate that renal functions does not play an important role for above-shown findings,
+we will re-fit mixed-effects model adjusting also for the effect of renal function. We will do it
+only for IL-18BP where modest correlation between average values of renal markers and IL-18BP levels
+was found.
 
 ### Adjustment for EGFR
+
 ```{r}
 model_data <- data_long %>% 
   filter(!is.na(il18_bp_value))
@@ -2100,6 +2085,7 @@ BIC(model_il18_bp, model_il18_bp_adjEGFR)
 Inclusion of EGFR improves the fit slightly
 
 ### Adjustment for creatinine
+
 ```{r}
 
 
@@ -2149,15 +2135,20 @@ AIC(model_il18_bp, model_il18_bp_adjEGFR)
 BIC(model_il18_bp, model_il18_bp_adjEGFR)
 ```
 
-
-The analysis shows that when renal function are accounted for (included as a covariate to the mixed-effects model), there is no remaining variability explainable by other factors such as `group` [acute rejection/no rejection/healthy], `time_point` and `group:timepoint` interaction. It suggests that IL-18BP might be driven mainly with renal function and its change over time whereas the effects of `group` and `timepoint` etc may be indirect. 
-
+The analysis shows that when renal function are accounted for (included as a covariate to the
+mixed-effects model), there is no remaining variability explainable by other factors such as `group`
+\[acute rejection/no rejection/healthy\], `time_point` and `group:timepoint` interaction. It
+suggests that IL-18BP might be driven mainly with renal function and its change over time whereas
+the effects of `group` and `timepoint` etc may be indirect.
 
 ## Adjusted free IL-18 model
 
-Given that IL-18BP is seemingly affected with renal function, and the IL18-BP affects level of other forms of IL-18 (including free IL-18), we will fit model explaining the IL-18 levels but simultaneously adjusting for renal functions
+Given that IL-18BP is seemingly affected with renal function, and the IL18-BP affects level of other
+forms of IL-18 (including free IL-18), we will fit model explaining the IL-18 levels but
+simultaneously adjusting for renal functions
 
 ### Adjustment for EGFR
+
 ```{r}
 model_data <- data_long %>% 
   filter(!is.na(il18_free))
@@ -2213,9 +2204,11 @@ AIC(model_il18_free, model_il18_free_adjEGFR)
 BIC(model_il18_free, model_il18_free_adjEGFR)
 
 ```
+
 Inclusion of EGFR improves the fit noticeably
 
 ### Adjustment for creatinine
+
 ```{r}
 
 
@@ -2275,13 +2268,16 @@ AIC(model_il18_free, model_il18_free_adjEGFR)
 BIC(model_il18_free, model_il18_free_adjEGFR)
 ```
 
-Adjustment for renal function does not modify result of the model explaining free IL-18. Markers of renal function do not clearly affect the pattern of difference in free IL-18 levels across groups or time points
+Adjustment for renal function does not modify result of the model explaining free IL-18. Markers of
+renal function do not clearly affect the pattern of difference in free IL-18 levels across groups or
+time points
 
 What about total IL-18?
 
 ## Adjusted total IL-18 model
 
 ### Adjustment for EGFR
+
 ```{r}
 model_data <- data_long %>% 
   filter(!is.na(il18_value))
@@ -2338,8 +2334,8 @@ BIC(model_il18_value, model_il18_value_adjEGFR)
 
 ```
 
-
 ### Adjustment for creatinine
+
 ```{r}
 
 
@@ -2399,12 +2395,14 @@ AIC(model_il18_value, model_il18_value_adjEGFR)
 BIC(model_il18_value, model_il18_value_adjEGFR)
 ```
 
-Adjustment for renal function does not modify the results of the models explaining total IL-18. Markers of renal function do not clearly affect the above-shown patterns in total IL-18 levels and their difference across groups or time points
-
+Adjustment for renal function does not modify the results of the models explaining total IL-18.
+Markers of renal function do not clearly affect the above-shown patterns in total IL-18 levels and
+their difference across groups or time points
 
 ## Renal function adjusment for other interleukins
 
 ### IL-1a
+
 ```{r}
 model_data <- data_long %>% 
   filter(!is.na(il1_a_value))
@@ -2438,10 +2436,12 @@ Anova(model_il1a_value_adjEGFR_simple , type=2, test.statistic='F')
 summary(model_il1a_value_adjEGFR_simple)
 ```
 
-There is sign that renal function affect also IL-1b, but it seems to be driven mainly by the difference of healthy subject. Analysis taking into account only planned measurements from patients does not show any indication that renal function affects the IL-1b levels. 
-
+There is sign that renal function affect also IL-1b, but it seems to be driven mainly by the
+difference of healthy subject. Analysis taking into account only planned measurements from patients
+does not show any indication that renal function affects the IL-1b levels.
 
 ### IL-1b
+
 ```{r}
 model_data <- data_long %>% 
   filter(!is.na(il1_b_value))
@@ -2463,8 +2463,8 @@ Anova(model_il1a_value_adjCRE, type=2, test.statistic='F')
 summary(model_il1a_value_adjCRE)
 ```
 
-
 ### IL-1RA
+
 ```{r}
 model_data <- data_long %>% 
   filter(!is.na(il1_ra_value))
@@ -2486,8 +2486,8 @@ Anova(model_il1a_value_adjCRE, type=2, test.statistic='F')
 summary(model_il1a_value_adjCRE)
 ```
 
-
 ### IL-36b
+
 ```{r}
 model_data <- data_long %>% 
   filter(!is.na(il36_b_value))
@@ -2512,6 +2512,7 @@ summary(model_il1a_value_adjCRE)
 # IL18 forms plot
 
 At first, we need to transform IL-18 levels to molar concentration (pM/L)
+
 ```{r}
 data_long <- data_long %>% 
   mutate( il18bp_pM = (((il18_bp_value/1e12)*1000) / 19000)*1e12,
@@ -2519,9 +2520,10 @@ data_long <- data_long %>%
         il18free_pM = (((il18_free/1e12)*1000) / 17200) *1e12)
 ```
 
-
-
-Now, we can create plots to demonstrate the relationship between IL-18BP levels and IL-18 levels (both free and total). We will concentrate on healthy individuals and the initial measurement from the group without rejection, noted for its significant variability in IL-18BP and IL-18 levels. The plots will display examples showcasing both minimal and very high IL-18 binding.
+Now, we can create plots to demonstrate the relationship between IL-18BP levels and IL-18 levels
+(both free and total). We will concentrate on healthy individuals and the initial measurement from
+the group without rejection, noted for its significant variability in IL-18BP and IL-18 levels. The
+plots will display examples showcasing both minimal and very high IL-18 binding.
 
 ## Individual plots per selected groups
 
@@ -2749,7 +2751,6 @@ wdat <- wdat %>%
 summary(wdat)
 ```
 
-
 ## Il18bp model
 
 ```{r}
@@ -2815,7 +2816,6 @@ tr[,2] <- round(tr[,2], 4)
 kableExtra::kable(tr)
 
 ```
-
 
 ## Il-1a model
 
@@ -2941,6 +2941,7 @@ tr[,1] <- round(exp(tr[,1]), 3)
 tr[,2] <- round(tr[,2], 4)
 kableExtra::kable(tr)
 ```
+
 ## Il-18 total model
 
 ```{r}
@@ -3005,7 +3006,6 @@ kableExtra::kable(tr)
 
 ```
 
-
 ## Il-18free model
 
 ```{r}
@@ -3068,7 +3068,6 @@ tr[,1] <- round(exp(tr[,1]), 3)
 tr[,2] <- round(tr[,2], 4)
 kableExtra::kable(tr)
 ```
-
 
 ## Il-36b model
 
